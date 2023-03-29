@@ -10,12 +10,22 @@ foreach (src_dir ${SRC_DIRS})
 endforeach (src_dir)
 
 
-set(LINK_LIBS m pthread jpeg iconv sqlite3 ssl crypto x264)
-set(FFMPEG_LIBS avcodec avformat avutil swresample swscale avfilter)
-
+#语言
 set(CMAKE_CXX_STANDARD 11)
 
-add_executable(FFmpeg_Demo main.cpp)
+
+#头文件
+include_directories(ffmpeg_lib/include/)
+
+#target
+add_executable(demo main.cpp)
+
+#动态链接
+set(ffmpeg_libs_dir ${PROJECT_SOURCE_DIR}/ffmpeg_lib/lib)
+link_directories(${ffmpeg_libs_dir})
+file(GLOB FFMPEG_LIBS ${ffmpeg_libs_dir}/*.dylib)
+
+
 
 add_subdirectory(chapter10)
 add_subdirectory(chapter11)

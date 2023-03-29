@@ -1,0 +1,14 @@
+prefix=/Users/admin/home_space/media/FFmpeg/build
+exec_prefix=${prefix}
+libdir=/Users/admin/home_space/media/FFmpeg/build/lib
+includedir=/Users/admin/home_space/media/FFmpeg/build/include
+
+Name: libavcodec
+Description: FFmpeg codec library
+Version: 58.91.100
+Requires: 
+Requires.private: libswresample >= 3.7.100, libavutil >= 56.51.100
+Conflicts:
+Libs: -L${libdir}  -lavcodec 
+Libs.private: -liconv -lm -llzma -lz -framework AudioToolbox -pthread -framework VideoToolbox -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework CoreServices
+Cflags: -I${includedir}
