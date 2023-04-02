@@ -9,37 +9,22 @@ foreach (src_dir ${SRC_DIRS})
 endforeach (src_dir)
 include_directories(inc)
 
-#target
+#ffmpeg
+set(FFMPEG_LIBS avcodec avformat avutil swresample swscale avfilter)
+if(APPLE)
+    # Mac平台编译器标志
+    include_directories(${CMAKE_SOURCE_DIR}/ffmpeg_dep/mac/include)
+    link_directories(${CMAKE_SOURCE_DIR}/ffmpeg_dep/mac/lib)
+elseif(WIN32)
+    set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)  #windows 需要dll在exe相同目录
+    include_directories(${CMAKE_SOURCE_DIR}/ffmpeg_dep/windows/include)
+    link_directories(${CMAKE_SOURCE_DIR}/ffmpeg_dep/windows/lib)
+endif()
 
-
-#if(APPLE)
-#    # Mac平台编译器标志
-#    include_directories(${CMAKE_SOURCE_DIR}/ffmpeg_dep/mac/include)
-#    link_directories(${CMAKE_SOURCE_DIR}/ffmpeg_dep/mac/lib)
-#elseif(WIN32)
-#
-#endif()
-# Windows平台编译器标志
-include_directories(${CMAKE_SOURCE_DIR}/ffmpeg_dep/windows/include)
-link_directories(${CMAKE_SOURCE_DIR}/ffmpeg_dep/windows/lib)
-add_executable(proj_name main.cpp)
-target_link_libraries(
-        proj_name
-        avcodec
-        avdevice
-        avfilter
-        avformat
-        avutil
-        postproc
-        swresample
-        swscale
-)
-
-#add_subdirectory(chapter10)
-#add_subdirectory(chapter11)
-#add_subdirectory(chapter12)
-#add_subdirectory(chapter13)
-#add_subdirectory(chapter14)
-#add_subdirectory(chapter15)
-#
-#add_subdirectory(Tutorial/SDK_Demo)
+add_subdirectory(chapter10)
+add_subdirectory(chapter11)
+add_subdirectory(chapter12)
+add_subdirectory(chapter13)
+add_subdirectory(chapter14)
+add_subdirectory(chapter15)
+add_subdirectory(Tutorial/SDK_Demo)
