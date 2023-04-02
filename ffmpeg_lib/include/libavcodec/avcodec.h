@@ -783,7 +783,7 @@ typedef struct AVCodecContext {
      * - encoding: Set by user.
      * - decoding: unused
      */
-    int max_b_frames;
+    int max_b_frames; //b帧
 
     /**
      * qscale factor between IP and B-frames

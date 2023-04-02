@@ -32,14 +32,12 @@ int32_t init_video_encoder(const char *codec_name) {
         return -1;
     }
 
-    // 创建编码器上下文结构
+    // 创建编码器上下文结构,并初始化编码参数
     codec_ctx = avcodec_alloc_context3(codec);
     if (!codec_ctx) {
         std::cerr << "Error: could not allocate video codec context." << std::endl;
         return -1;
     }
-
-    // 配置编码参数
     codec_ctx->profile = FF_PROFILE_H264_HIGH;
     codec_ctx->bit_rate = 2000000;
     codec_ctx->width = 1280;
@@ -54,7 +52,7 @@ int32_t init_video_encoder(const char *codec_name) {
         av_opt_set(codec_ctx->priv_data, "preset", "slow", 0);
     }
 
-    // 使用指定的 codec 初始化编码器上下文结构
+    //打开编码器
     int32_t result = avcodec_open2(codec_ctx, codec, nullptr);
     if (result < 0) {
         std::cerr << "Error: could not open codec" << std::endl;
@@ -72,10 +70,11 @@ int32_t init_video_encoder(const char *codec_name) {
         std::cerr << "Error: could not allocate AVFrame." << std::endl;
         return -1;
     }
+
+    //根据宽高和格式分配内存
     frame->width = codec_ctx->width;
     frame->height = codec_ctx->height;
     frame->format = codec_ctx->pix_fmt;
-
     result = av_frame_get_buffer(frame, 0);
     if (result < 0) {
         std::cerr << "Error: could not get AVFrame buffer." << std::endl;
@@ -99,6 +98,7 @@ static int32_t encode_frame(bool flushing) {
         std::cout << "Send frame to encoder with pts: " << frame->pts << std::endl;
     }
 
+    //发送视频帧到编码器
     result = avcodec_send_frame(codec_ctx, flushing ? nullptr : frame);
     if (result < 0) {
         std::cerr << "Error: avcodec_send_frame failed." << std::endl;
@@ -106,6 +106,7 @@ static int32_t encode_frame(bool flushing) {
     }
 
     while (result >= 0) {
+        //从编码器读取码流
         result = avcodec_receive_packet(codec_ctx, pkt);
         if (result == AVERROR(EAGAIN) || result == AVERROR_EOF) {
             return 1;
@@ -119,6 +120,7 @@ static int32_t encode_frame(bool flushing) {
         }
         std::cout << "Got encoded package with dts:" << pkt->dts
                   << ", pts:" << pkt->pts << ", " << std::endl;
+        //将码率写入文件
         write_pkt_to_file(pkt);
     }
     return 0;
@@ -126,26 +128,34 @@ static int32_t encode_frame(bool flushing) {
 
 int32_t encoding(int32_t frame_cnt) {
     int result = 0;
+
+
     for (size_t i = 0; i < frame_cnt; i++) {
+        //视频帧是否可可写入
         result = av_frame_make_writable(frame);
         if (result < 0) {
             std::cerr << "Error: could not av_frame_make_writable." << std::endl;
             return result;
         }
 
+        //从文件中读取原始视频帧
         result = read_yuv_to_frame(frame);
         if (result < 0) {
             std::cerr << "Error: read_yuv_to_frame failed." << std::endl;
             return result;
         }
+        //设置pts = i
         frame->pts = i;
 
+        //编码一帧视频
         result = encode_frame(false);
         if (result < 0) {
             std::cerr << "Error: encode_frame failed." << std::endl;
             return result;
         }
     }
+
+    //排出最后的视频帧
     result = encode_frame(true);
     if (result < 0) {
         std::cerr << "Error: flushing failed." << std::endl;

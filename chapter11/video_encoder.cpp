@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
         goto failed;
     }
 
-    failed:
+failed:
     destroy_video_encoder();
     close_input_output_files();
     return 0;
