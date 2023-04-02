@@ -19,7 +19,7 @@ static AVFrame *frame = nullptr;
 static AVPacket *pkt = nullptr;
 
 int32_t init_video_decoder() {
-    codec = avcodec_find_decoder(AV_CODEC_ID_H264);
+    codec = const_cast<AVCodec *>(avcodec_find_decoder(AV_CODEC_ID_H264));
     if (!codec) {
         std::cerr << "Error: could not find codec." << std::endl;
         return -1;

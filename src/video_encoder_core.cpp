@@ -25,7 +25,7 @@ int32_t init_video_encoder(const char *codec_name) {
     }
 
     // 查找编码器
-    codec = avcodec_find_encoder_by_name(codec_name);
+    codec = const_cast<AVCodec* >(avcodec_find_encoder_by_name(codec_name));
     if (!codec) {
         std::cerr << "Error: could not find codec with codec name:"
                   << std::string(codec_name) << std::endl;
