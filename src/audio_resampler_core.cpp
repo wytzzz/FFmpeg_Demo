@@ -47,6 +47,7 @@ int32_t init_audio_resampler(int32_t in_sample_rate, const char *in_sample_fmt,
                              const char *out_sample_fmt,
                              const char *out_ch_layout) {
     int32_t result = 0;
+    //分配SwrContext
     swr_ctx = swr_alloc();
     if (!swr_ctx) {
         std::cerr << "Error: failed to allocate SwrContext." << std::endl;
@@ -102,12 +103,14 @@ int32_t init_audio_resampler(int32_t in_sample_rate, const char *in_sample_fmt,
     av_opt_set_int(swr_ctx, "out_sample_rate", dst_rate, 0);
     av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt", dst_sample_fmt, 0);
 
+    //初始化SwrContext
     result = swr_init(swr_ctx);
     if (result < 0) {
         std::cerr << "Error: failed to initialize SwrContext." << std::endl;
         return -1;
     }
 
+    //分配input frame
     input_frame = av_frame_alloc();
     if (!input_frame) {
         std::cerr << "Error: could not alloc input frame." << std::endl;
@@ -118,6 +121,9 @@ int32_t init_audio_resampler(int32_t in_sample_rate, const char *in_sample_fmt,
         std::cerr << "Error: failed to initialize input frame." << std::endl;
         return -1;
     }
+    //初始化input frame
+    //将一帧输入样本数转化输出样本数
+
     max_dst_nb_samples = dst_nb_samples = av_rescale_rnd(
             SRC_NB_SAMPLES, out_sample_rate, in_sample_rate, AV_ROUND_UP);
     dst_nb_channels = av_get_channel_layout_nb_channels(dst_ch_layout);
@@ -130,9 +136,14 @@ int32_t init_audio_resampler(int32_t in_sample_rate, const char *in_sample_fmt,
 static int32_t resampling_frame() {
     int32_t result = 0;
     int32_t dst_bufsize = 0;
-    dst_nb_samples =
-            av_rescale_rnd(swr_get_delay(swr_ctx, src_rate) + SRC_NB_SAMPLES,
-                           dst_rate, src_rate, AV_ROUND_UP);
+
+    //计算swr内部耗时
+    int32_t delay_samples = swr_get_delay(swr_ctx, src_rate);
+    //额外增加一帧buffer
+    delay_samples += SRC_NB_SAMPLES;
+    dst_nb_samples = av_rescale_rnd( delay_samples,dst_rate, src_rate, AV_ROUND_UP);
+
+    //根据输出buffer分配输出frame
     if (dst_nb_samples > max_dst_nb_samples) {
         av_freep(&dst_data[0]);
         result = av_samples_alloc(dst_data, &dst_linesize, dst_nb_channels,
@@ -145,24 +156,37 @@ static int32_t resampling_frame() {
                   << std::endl;
         max_dst_nb_samples = dst_nb_samples;
     }
+    //单个channel的采样数
     result = swr_convert(swr_ctx, dst_data, dst_nb_samples,
                          (const uint8_t **) input_frame->data, SRC_NB_SAMPLES);
+
     if (result < 0) {
         std::cerr << "Error:swr_convert failed." << std::endl;
         return -1;
     }
+
+    //计算buffer size
+    //dst_linesize = sample_num * sample_size * channel
+    //1152 *
     dst_bufsize = av_samples_get_buffer_size(&dst_linesize, dst_nb_channels,
                                              result, dst_sample_fmt, 1);
     if (dst_bufsize < 0) {
         std::cerr << "Error:Could not get sample buffer size." << std::endl;
         return -1;
     }
+    //输出是二维的,我们只需要读取第一行.
+    std::cout << "sample size : " << result << " dst size :" << dst_bufsize << std::endl;
     write_packed_data_to_file(dst_data[0], dst_bufsize);
 
     return result;
 }
 
+
+
 int32_t audio_resampling() {
+
+    //根据音频格式分配输出buffer
+    //dst_linesize表示一帧数据的大小
     int32_t result = av_samples_alloc_array_and_samples(
             &dst_data, &dst_linesize, dst_nb_channels, dst_nb_samples, dst_sample_fmt,
             0);
@@ -171,14 +195,21 @@ int32_t audio_resampling() {
                   << std::endl;
         return -1;
     }
+
+
+
     std::cout << "dst_linesize:" << dst_linesize << std::endl;
 
     while (!end_of_input_file()) {
+        //读取一帧音频
         result = read_pcm_to_frame2(input_frame, src_sample_fmt, 2);
         if (result < 0) {
             std::cerr << "Error: read_pcm_to_frame failed." << std::endl;
             return -1;
         }
+
+
+        //重采样一帧音频
         result = resampling_frame();
         if (result < 0) {
             std::cerr << "Error: resampling_frame failed." << std::endl;

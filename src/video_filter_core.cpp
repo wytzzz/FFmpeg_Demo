@@ -53,6 +53,7 @@ int32_t init_video_filter(int32_t width, int32_t height,
                           const char *filter_descr) {
     int32_t result = 0;
     char args[512] = {0};
+    //通过name查找filter
     const AVFilter *buffersrc = avfilter_get_by_name("buffer");
     const AVFilter *buffersink = avfilter_get_by_name("buffersink");
     AVFilterInOut *outputs = avfilter_inout_alloc();
@@ -61,6 +62,7 @@ int32_t init_video_filter(int32_t width, int32_t height,
     enum AVPixelFormat pix_fmts[] = {AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE};
 
     do {
+        //分配AVFilterGraph结构
         filter_graph = avfilter_graph_alloc();
         if (!outputs || !inputs || !filter_graph) {
             std::cerr << "Error: creating filter graph failed." << std::endl;
@@ -68,9 +70,11 @@ int32_t init_video_filter(int32_t width, int32_t height,
             break;
         }
 
+        //初始化filter参数
         snprintf(args, sizeof(args),
                  "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
                  width, height, AV_PIX_FMT_YUV420P, 1, STREAM_FRAME_RATE, 1, 1);
+        //AVFilter->AVFilterContext, 并加入到AVFilterGraph
         result = avfilter_graph_create_filter(&buffersrc_ctx, buffersrc, "in", args,
                                               NULL, filter_graph);
         if (result < 0) {
@@ -78,6 +82,7 @@ int32_t init_video_filter(int32_t width, int32_t height,
             break;
         }
 
+        //AVFilter->AVFilterContext, 并加入到AVFilterGraph
         result = avfilter_graph_create_filter(&buffersink_ctx, buffersink, "out",
                                               NULL, NULL, filter_graph);
         if (result < 0) {
@@ -85,6 +90,7 @@ int32_t init_video_filter(int32_t width, int32_t height,
             break;
         }
 
+        //设置参数
         result = av_opt_set_int_list(buffersink_ctx, "pix_fmts", pix_fmts,
                                      AV_PIX_FMT_NONE, AV_OPT_SEARCH_CHILDREN);
         if (result < 0) {
@@ -102,23 +108,27 @@ int32_t init_video_filter(int32_t width, int32_t height,
         inputs->pad_idx = 0;
         inputs->next = NULL;
 
+        //分析 "scale=640∶480，transpose=cclock"
         if ((result = avfilter_graph_parse_ptr(filter_graph, filter_descr, &inputs,
                                                &outputs, NULL)) < 0) {
             std::cerr << "Error: avfilter_graph_parse_ptr failed" << std::endl;
             break;
         }
 
+        //验证滤镜图整体配置的有效性
         if ((result = avfilter_graph_config(filter_graph, NULL)) < 0) {
             std::cerr << "Error: Graph config invalid." << std::endl;
             break;
         }
 
+        //初始化帧
         result = init_frames(width, height, AV_PIX_FMT_YUV420P);
         if (result < 0) {
             std::cerr << "Error: init frames failed." << std::endl;
             break;
         }
     } while (0);
+
 
     avfilter_inout_free(&inputs);
     avfilter_inout_free(&outputs);
@@ -127,6 +137,11 @@ int32_t init_video_filter(int32_t width, int32_t height,
 
 static int32_t filter_frame() {
     int32_t result = 0;
+
+    //在filter_frame中，对一帧图像进行编辑主要分为两步。
+    // （1）通过av_buffersrc_add_frame_flags将输入图像添加到滤镜图中。
+    // （2）通过av_buffersink_get_frame从sink滤镜中获取编辑后的图
+    //
     if ((result = av_buffersrc_add_frame_flags(buffersrc_ctx, input_frame,
                                                AV_BUFFERSRC_FLAG_KEEP_REF)) < 0) {
         std::cerr << "Error: add frame to buffer src failed." << std::endl;

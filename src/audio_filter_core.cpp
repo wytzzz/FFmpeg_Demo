@@ -54,12 +54,15 @@ int32_t init_audio_filter(char *volume_factor) {
         return AVERROR_FILTER_NOT_FOUND;
     }
 
+
+    //先alloc再init
     abuffersrc_ctx = avfilter_graph_alloc_filter(filter_graph, abuffer, "src");
     if (!abuffersrc_ctx) {
         std::cout << "Error: Could not allocate the abuffer instance." << std::endl;
         return AVERROR(ENOMEM);
     }
 
+    //设置abuffer滤镜的参数
     av_get_channel_layout_string(ch_layout, sizeof(ch_layout), 0,
                                  INPUT_CHANNEL_LAYOUT);
     av_opt_set(abuffersrc_ctx, "channel_layout", ch_layout,
@@ -90,6 +93,7 @@ int32_t init_audio_filter(char *volume_factor) {
         return AVERROR(ENOMEM);
     }
 
+    //通过dict方式初始化filter
     av_dict_set(&options_dict, "volume", volume_factor, 0);
     result = avfilter_init_dict(volume_ctx, &options_dict);
     av_dict_free(&options_dict);
@@ -111,6 +115,7 @@ int32_t init_audio_filter(char *volume_factor) {
         return AVERROR(ENOMEM);
     }
 
+    //通过str方式初始化filter
     snprintf(options_str, sizeof(options_str),
              "sample_fmts=%s:sample_rates=%d:channel_layouts=0x%" PRIx64,
              av_get_sample_fmt_name(AV_SAMPLE_FMT_S16), 22050,
@@ -135,7 +140,6 @@ int32_t init_audio_filter(char *volume_factor) {
                   << std::endl;
         return AVERROR(ENOMEM);
     }
-
     result = avfilter_init_str(abuffersink_ctx, NULL);
     if (result < 0) {
         std::cout << "Error: Could not initialize the abuffersink instance."
@@ -144,6 +148,7 @@ int32_t init_audio_filter(char *volume_factor) {
     }
 
     /* 连接创建好的滤镜 */
+    //abuffersrc_ctx->volume_ctx->aformat_ctx->abuffersink_ctx
     result = avfilter_link(abuffersrc_ctx, 0, volume_ctx, 0);
     if (result >= 0) result = avfilter_link(volume_ctx, 0, aformat_ctx, 0);
     if (result >= 0) result = avfilter_link(aformat_ctx, 0, abuffersink_ctx, 0);
@@ -224,7 +229,8 @@ int32_t audio_filtering() {
             std::cerr << "Error: init_frame failed." << std::endl;
             return result;
         }
-        result = read_pcm_to_frame2(input_frame, INPUT_FORMAT, 2);
+        //由于输入为plane格式,只读取一个平面就可以.
+        result = read_pcm_to_frame2(input_frame, INPUT_FORMAT, 1);
         if (result < 0) {
             std::cerr << "Error: read_pcm_to_frame failed." << std::endl;
             return -1;

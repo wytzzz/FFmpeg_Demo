@@ -50,7 +50,7 @@ int32_t init_video_swscale(char *src_size, char *src_fmt, char *dst_size,
                            char *dst_fmt) {
     int32_t result = 0;
 
-    // 解析输入视频和输出视频的图像尺寸
+    //解析输入图像尺寸
     result = av_parse_video_size(&src_width, &src_height, src_size);
     if (result < 0) {
         std::cerr << "Error: Invalid input size. Must be in the form WxH or a "
@@ -58,6 +58,7 @@ int32_t init_video_swscale(char *src_size, char *src_fmt, char *dst_size,
                   << std::string(src_size) << std::endl;
         return -1;
     }
+    //解析输出的图像尺寸
     result = av_parse_video_size(&dst_width, &dst_height, dst_size);
     if (result < 0) {
         std::cerr << "Error: Invalid output size. Must be in the form WxH or a "
@@ -66,7 +67,7 @@ int32_t init_video_swscale(char *src_size, char *src_fmt, char *dst_size,
         return -1;
     }
 
-    // 选择输入视频和输出视频的图像格式
+    //解析输入颜色空间
     if (!strcasecmp(src_fmt, "YUV420P")) {
         src_pix_fmt = AV_PIX_FMT_YUV410P;
     } else if (!strcasecmp(src_fmt, "RGB24")) {
@@ -77,6 +78,7 @@ int32_t init_video_swscale(char *src_size, char *src_fmt, char *dst_size,
         return -1;
     }
 
+    //解析输出颜色空间
     if (!strcasecmp(dst_fmt, "YUV420P")) {
         dst_pix_fmt = AV_PIX_FMT_YUV410P;
     } else if (!strcasecmp(dst_fmt, "RGB24")) {
@@ -111,6 +113,7 @@ int32_t transforming(int32_t frame_cnt) {
     uint8_t *dst_data[4];
     int32_t dst_linesize[4] = {0}, dst_bufsize = 0;
 
+    //为输出frame分配内存
     result = av_image_alloc(dst_data, dst_linesize, dst_width, dst_height,
                             dst_pix_fmt, 1);
     if (result < 0) {
@@ -120,17 +123,22 @@ int32_t transforming(int32_t frame_cnt) {
     dst_bufsize = result;
 
     for (int idx = 0; idx < frame_cnt; idx++) {
+        //读取yuv图像
         result = read_yuv_to_frame(input_frame);
         if (result < 0) {
             std::cerr << "Error: read_yuv_to_frame failed." << std::endl;
             return result;
         }
+
+        //转换
         sws_scale(sws_ctx, input_frame->data, input_frame->linesize, 0, src_height,
                   dst_data, dst_linesize);
 
+        //输出yuv图像
         write_packed_data_to_file(dst_data[0], dst_bufsize);
     }
 
+    //释放输出buffer
     av_freep(&dst_data[0]);
     return result;
 }

@@ -36,6 +36,7 @@ static int32_t init_input_video(char *video_input_file,
         std::cerr << "Error: avformat_open_input failed!" << std::endl;
         return -1;
     }
+    //读取stream信息
     result = avformat_find_stream_info(video_fmt_ctx, nullptr);
     if (result < 0) {
         std::cerr << "Error: avformat_find_stream_info failed!" << std::endl;
@@ -197,9 +198,17 @@ int32_t muxing() {
                 break;
             }
 
+            //如果没有时间戳
             if (pkt.pts == AV_NOPTS_VALUE) {
+                //计算时间戳
+
+                //时间基 1/fps
                 int64_t frame_duration =
                         (double) AV_TIME_BASE / av_q2d(in_video_st->r_frame_rate);
+
+                //时间基 time_base
+                //时间基的转换 : a * b / c
+                //1 * 1/fps / time_base
                 pkt.duration = (double) frame_duration /
                                (double) (av_q2d(in_video_st->time_base) * AV_TIME_BASE);
                 pkt.pts = (double) (video_frame_idx * frame_duration) /
@@ -228,6 +237,7 @@ int32_t muxing() {
             output_stream = output_fmt_ctx->streams[out_audio_st_idx];
         }
 
+        //将输入time_base转换为输出time_base
         pkt.pts = av_rescale_q_rnd(
                 pkt.pts, input_stream->time_base, output_stream->time_base,
                 (AVRounding) (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
@@ -239,6 +249,7 @@ int32_t muxing() {
         std::cout << "Final pts:" << pkt.pts << ", duration:" << pkt.duration
                   << ", output_stream->time_base:" << output_stream->time_base.num
                   << "/" << output_stream->time_base.den << std::endl;
+        //
         if (av_interleaved_write_frame(output_fmt_ctx, &pkt) < 0) {
             std::cerr << "Error: failed to mux packet!" << std::endl;
             break;

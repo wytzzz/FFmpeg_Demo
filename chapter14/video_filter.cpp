@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     int32_t pic_width = atoi(argv[2]);
     int32_t pic_height = atoi(argv[3]);
     int32_t total_frame_cnt = atoi(argv[4]);
-    char *filter_descr = argv[5];
+    char *filter_descr = argv[5];  //filter参数
     char *output_file_name = argv[6];
 
     int32_t result = open_input_output_files(input_file_name, output_file_name);
@@ -28,11 +28,13 @@ int main(int argc, char **argv) {
         return result;
     }
 
+    //初始化视频filter
     result = init_video_filter(pic_width, pic_height, filter_descr);
     if (result < 0) {
         return result;
     }
 
+    //初始化音频filter
     result = filtering_video(total_frame_cnt);
     if (result < 0) {
         return result;

@@ -1076,8 +1076,8 @@ typedef struct AVStream {
 #define AVSTREAM_EVENT_FLAG_NEW_PACKETS (1 << 1)
 
     /**
-     * Real base framerate of the stream.
-     * This is the lowest framerate with which all timestamps can be
+     *
+     * This is the Real base framerate of the stream.lowest framerate with which all timestamps can be
      * represented accurately (it is the least common multiple of all
      * framerates in the stream). Note, this value is just a guess!
      * For example, if the time base is 1/90000 and all frames have either

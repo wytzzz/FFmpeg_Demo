@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <memory>
 #include <iostream>
 
 static FILE *input_file = nullptr;
@@ -166,6 +167,7 @@ int32_t write_samples_to_pcm2(AVFrame *frame, enum AVSampleFormat format,
 
 int32_t read_pcm_to_frame2(AVFrame *frame, enum AVSampleFormat format,
                            int channels) {
+
     int data_size = av_get_bytes_per_sample(format);
     if (data_size < 0) {
         /* This should not occur, checking just for paranoia */
@@ -173,13 +175,15 @@ int32_t read_pcm_to_frame2(AVFrame *frame, enum AVSampleFormat format,
         return -1;
     }
 
-    // 从输入文件中交替读取一个采样值的各个声道的数据，
-    // 保存到AVFrame结构的存储分量中
+    // interleaved->planar
+    int64_t channel_size = 0;
     for (int i = 0; i < frame->nb_samples; i++) {
         for (int ch = 0; ch < channels; ch++) {
             fread(frame->data[ch] + data_size * i, 1, data_size, input_file);
+            channel_size += data_size;
         }
     }
+
     return 0;
 }
 
