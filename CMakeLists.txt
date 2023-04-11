@@ -9,8 +9,9 @@ foreach (src_dir ${SRC_DIRS})
 endforeach (src_dir)
 include_directories(inc)
 
+
 #ffmpeg
-set(FFMPEG_LIBS avcodec avformat avutil swresample swscale avfilter)
+set(FFMPEG_LIBS avcodec avdevice postproc avformat avutil swresample swscale avfilter)
 if(APPLE)
     # Mac平台编译器标志
     include_directories(${CMAKE_SOURCE_DIR}/ffmpeg_dep/mac/include)
@@ -21,6 +22,17 @@ elseif(WIN32)
     link_directories(${CMAKE_SOURCE_DIR}/ffmpeg_dep/windows/lib)
 endif()
 
+
+#sdl
+include_directories(SDL_dep/include)
+set(SDL2_LIBS SDL2)
+if(APPLE)
+elseif(WIN32)
+    set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)  #windows 需要dll在exe相同目录
+    include_directories(${CMAKE_SOURCE_DIR}/SDL_dep/windows/include)
+    link_directories(${CMAKE_SOURCE_DIR}/SDL_dep/windows/lib)
+endif()
+
 add_subdirectory(chapter10)
 add_subdirectory(chapter11)
 add_subdirectory(chapter12)
@@ -28,3 +40,4 @@ add_subdirectory(chapter13)
 add_subdirectory(chapter14)
 add_subdirectory(chapter15)
 add_subdirectory(Tutorial/SDK_Demo)
+add_subdirectory(tools)
