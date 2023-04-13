@@ -24,10 +24,13 @@ endif()
 
 
 #sdl
-include_directories(SDL_dep/include)
+
 set(SDL2_LIBS SDL2)
 if(APPLE)
+    include_directories(/usr/local/Cellar/sdl2/2.0.16/include)
+    link_directories(/usr/local/Cellar/sdl2/2.0.16/lib)
 elseif(WIN32)
+    include_directories(SDL_dep/include)
     set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)  #windows 需要dll在exe相同目录
     include_directories(${CMAKE_SOURCE_DIR}/SDL_dep/windows/include)
     link_directories(${CMAKE_SOURCE_DIR}/SDL_dep/windows/lib)
