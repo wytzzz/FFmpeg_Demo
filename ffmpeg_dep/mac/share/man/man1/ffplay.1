@@ -259,18 +259,25 @@ Print detailed information about the muxer named \fImuxer_name\fR. Use the
 \&\fB\-formats\fR option to get a list of all muxers and demuxers.
 .IP "\fBfilter=\fR\fIfilter_name\fR" 4
 .IX Item "filter=filter_name"
-Print detailed information about the filter name \fIfilter_name\fR. Use the
+Print detailed information about the filter named \fIfilter_name\fR. Use the
 \&\fB\-filters\fR option to get a list of all filters.
 .IP "\fBbsf=\fR\fIbitstream_filter_name\fR" 4
 .IX Item "bsf=bitstream_filter_name"
-Print detailed information about the bitstream filter name \fIbitstream_filter_name\fR.
+Print detailed information about the bitstream filter named \fIbitstream_filter_name\fR.
 Use the \fB\-bsfs\fR option to get a list of all bitstream filters.
+.IP "\fBprotocol=\fR\fIprotocol_name\fR" 4
+.IX Item "protocol=protocol_name"
+Print detailed information about the protocol named \fIprotocol_name\fR.
+Use the \fB\-protocols\fR option to get a list of all protocols.
 .RE
 .RS 4
 .RE
 .IP "\fB\-version\fR" 4
 .IX Item "-version"
 Show version.
+.IP "\fB\-buildconf\fR" 4
+.IX Item "-buildconf"
+Show the build configuration, one option per line.
 .IP "\fB\-formats\fR" 4
 .IX Item "-formats"
 Show available formats (including devices).
@@ -313,6 +320,9 @@ Show available sample formats.
 .IP "\fB\-layouts\fR" 4
 .IX Item "-layouts"
 Show channel names and standard channel layouts.
+.IP "\fB\-dispositions\fR" 4
+.IX Item "-dispositions"
+Show stream dispositions.
 .IP "\fB\-colors\fR" 4
 .IX Item "-colors"
 Show recognized color names.
@@ -582,7 +592,21 @@ Possible flags for this option are:
 .RE
 .RS 4
 .RE
+.IP "\fB\-cpucount\fR \fIcount\fR \fB(\fR\fIglobal\fR\fB)\fR" 4
+.IX Item "-cpucount count (global)"
 .PD
+Override detection of \s-1CPU\s0 count. This option is intended
+for testing. Do not use it unless you know what you're doing.
+.Sp
+.Vb 1
+\&        ffmpeg \-cpucount 2
+.Ve
+.IP "\fB\-max_alloc\fR \fIbytes\fR" 4
+.IX Item "-max_alloc bytes"
+Set the maximum size limit for allocating a block on the heap by ffmpeg's
+family of malloc functions. Exercise \fBextreme caution\fR when using
+this option. Don't use if you do not understand the full consequence of doing so.
+Default is \s-1INT_MAX.\s0
 .SS "AVOptions"
 .IX Subsection "AVOptions"
 These options are provided directly by the libavformat, libavdevice and
@@ -902,9 +926,9 @@ Toggle full screen.
 The FFmpeg developers.
 .PP
 For details about the authorship, see the Git history of the project
-(git://source.ffmpeg.org/ffmpeg), e.g. by typing the command
+(https://git.ffmpeg.org/ffmpeg), e.g. by typing the command
 \&\fBgit log\fR in the FFmpeg source directory, or browsing the
-online repository at <\fBhttp://source.ffmpeg.org\fR>.
+online repository at <\fBhttps://git.ffmpeg.org/ffmpeg\fR>.
 .PP
 Maintainers for the specific components are listed in the file
 \&\fI\s-1MAINTAINERS\s0\fR in the source code tree.

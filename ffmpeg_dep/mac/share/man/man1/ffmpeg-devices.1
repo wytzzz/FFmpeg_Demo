@@ -445,23 +445,30 @@ supports it.
 Set the pixel format of the captured video.
 Available values are:
 .RS 4
+.IP "\fBauto\fR" 4
+.IX Item "auto"
+This is the default which means 8\-bit \s-1YUV 422\s0 or 8\-bit \s-1ARGB\s0 if format
+autodetection is used, 8\-bit \s-1YUV 422\s0 otherwise.
 .IP "\fBuyvy422\fR" 4
 .IX Item "uyvy422"
-.PD 0
+8\-bit \s-1YUV 422.\s0
 .IP "\fByuv422p10\fR" 4
 .IX Item "yuv422p10"
+10\-bit \s-1YUV 422.\s0
 .IP "\fBargb\fR" 4
 .IX Item "argb"
+8\-bit \s-1RGB.\s0
 .IP "\fBbgra\fR" 4
 .IX Item "bgra"
+8\-bit \s-1RGB.\s0
 .IP "\fBrgb10\fR" 4
 .IX Item "rgb10"
+10\-bit \s-1RGB.\s0
 .RE
 .RS 4
 .RE
 .IP "\fBteletext_lines\fR" 4
 .IX Item "teletext_lines"
-.PD
 If set to nonzero, an additional teletext stream will be captured from the
 vertical ancillary data. Both \s-1SD PAL\s0 (576i) and \s-1HD\s0 (1080i or 1080p)
 sources are supported. In case of \s-1HD\s0 sources, \s-1OP47\s0 packets are decoded.
@@ -482,14 +489,33 @@ Defines number of audio channels to capture. Must be \fB2\fR, \fB8\fR or \fB16\f
 Defaults to \fB2\fR.
 .IP "\fBduplex_mode\fR" 4
 .IX Item "duplex_mode"
-Sets the decklink device duplex mode. Must be \fBunset\fR, \fBhalf\fR or \fBfull\fR.
+Sets the decklink device duplex/profile mode. Must be \fBunset\fR, \fBhalf\fR, \fBfull\fR,
+\&\fBone_sub_device_full\fR, \fBone_sub_device_half\fR, \fBtwo_sub_device_full\fR,
+\&\fBfour_sub_device_half\fR
 Defaults to \fBunset\fR.
+.Sp
+Note: DeckLink \s-1SDK 11.0\s0 have replaced the duplex property by a profile property.
+For the DeckLink Duo 2 and DeckLink Quad 2, a profile is shared between any 2
+sub-devices that utilize the same connectors. For the DeckLink 8K Pro, a profile
+is shared between all 4 sub-devices. So DeckLink 8K Pro support four profiles.
+.Sp
+Valid profile modes for DeckLink 8K Pro(with DeckLink \s-1SDK\s0 >= 11.0):
+\&\fBone_sub_device_full\fR, \fBone_sub_device_half\fR, \fBtwo_sub_device_full\fR,
+\&\fBfour_sub_device_half\fR
+.Sp
+Valid profile modes for DeckLink Quad 2 and DeckLink Duo 2:
+\&\fBhalf\fR, \fBfull\fR
 .IP "\fBtimecode_format\fR" 4
 .IX Item "timecode_format"
 Timecode type to include in the frame and video stream metadata. Must be
 \&\fBnone\fR, \fBrp188vitc\fR, \fBrp188vitc2\fR, \fBrp188ltc\fR,
-\&\fBrp188any\fR, \fBvitc\fR, \fBvitc2\fR, or \fBserial\fR. Defaults to
-\&\fBnone\fR (not included).
+\&\fBrp188hfr\fR, \fBrp188any\fR, \fBvitc\fR, \fBvitc2\fR, or \fBserial\fR.
+Defaults to \fBnone\fR (not included).
+.Sp
+In order to properly support 50/60 fps timecodes, the ordering of the queried
+timecode types for \fBrp188any\fR is \s-1HFR, VITC1, VITC2\s0 and \s-1LTC\s0 for >30 fps
+content. Note that this is slightly different to the ordering used by the
+DeckLink \s-1API,\s0 which is \s-1HFR, VITC1, LTC, VITC2.\s0
 .IP "\fBvideo_input\fR" 4
 .IX Item "video_input"
 Sets the video input source. Must be \fBunset\fR, \fBsdi\fR, \fBhdmi\fR,
@@ -549,6 +575,12 @@ isn't received with the first input frame. If that happens, the stored stream
 timecode will be inaccurate. If this option is set to \fBtrue\fR, input frames
 are dropped till a frame with timecode is received.
 Option \fItimecode_format\fR must be specified.
+Defaults to \fBfalse\fR.
+.IP "\fBenable_klv(\fR\fIbool\fR\fB)\fR" 4
+.IX Item "enable_klv(bool)"
+If set to \fBtrue\fR, extracts \s-1KLV\s0 data from \s-1VANC\s0 and outputs \s-1KLV\s0 packets.
+\&\s-1KLV VANC\s0 packets are joined based on \s-1MID\s0 and \s-1PSC\s0 fields and aggregated into
+one \s-1KLV\s0 packet.
 Defaults to \fBfalse\fR.
 .PP
 \fIExamples\fR
@@ -730,6 +762,12 @@ be anything even fake one.
 Save the currently used video capture filter device and its
 parameters (if the filter supports it) to a file.
 If a file with the same name exists it will be overwritten.
+.IP "\fBuse_video_device_timestamps\fR" 4
+.IX Item "use_video_device_timestamps"
+If set to \fBfalse\fR, the timestamp for video frames will be
+derived from the wallclock instead of the timestamp provided by
+the capture device. This allows working around devices that
+provide unreliable timestamps.
 .PP
 \fIExamples\fR
 .IX Subsection "Examples"
@@ -1014,11 +1052,15 @@ If you don't understand what all of that means, you probably don't want this.  L
 \&\s-1DRM\s0 device to capture on.  Defaults to \fB/dev/dri/card0\fR.
 .IP "\fBformat\fR" 4
 .IX Item "format"
-Pixel format of the framebuffer.  Defaults to \fBbgr0\fR.
+Pixel format of the framebuffer.  This can be autodetected if you are running Linux 5.7
+or later, but needs to be provided for earlier versions.  Defaults to \fBbgr0\fR,
+which is the most common format used by the Linux console and Xorg X server.
 .IP "\fBformat_modifier\fR" 4
 .IX Item "format_modifier"
 Format modifier to signal on output frames.  This is necessary to import correctly into
-some APIs, but can't be autodetected.  See the libdrm documentation for possible values.
+some APIs.  It can be autodetected if you are running Linux 5.7 or later, but will need
+to be provided explicitly when needed in earlier versions.  See the libdrm documentation
+for possible values.
 .IP "\fBcrtc_id\fR" 4
 .IX Item "crtc_id"
 \&\s-1KMS CRTC ID\s0 to define the capture source.  The first active plane on the given \s-1CRTC\s0
@@ -1603,6 +1645,14 @@ Grab at position \f(CW\*(C`10,20\*(C'\fR:
 .PP
 \fIOptions\fR
 .IX Subsection "Options"
+.IP "\fBselect_region\fR" 4
+.IX Item "select_region"
+Specify whether to select the grabbing area graphically using the pointer.
+A value of \f(CW1\fR prompts the user to select the grabbing area graphically
+by clicking and dragging. A single click with no dragging will select the
+whole screen. A region with zero width or height will also select the whole
+screen. This option overwrites the \fIvideo_size\fR, \fIgrab_x\fR, and
+\&\fIgrab_y\fR options. Default value is \f(CW0\fR.
 .IP "\fBdraw_mouse\fR" 4
 .IX Item "draw_mouse"
 Specify whether to draw the mouse pointer. A value of \f(CW0\fR specifies
@@ -1655,9 +1705,22 @@ With \fIfollow_mouse\fR:
 .Vb 1
 \&        ffmpeg \-f x11grab \-follow_mouse centered \-show_region 1 \-framerate 25 \-video_size cif \-i :0.0 out.mpg
 .Ve
+.IP "\fBwindow_id\fR" 4
+.IX Item "window_id"
+Grab this window, instead of the whole screen. Default value is 0, which maps to
+the whole screen (root window).
+.Sp
+The id of a window can be found using the \fBxwininfo\fR program, possibly with options \-tree and
+\&\-root.
+.Sp
+If the window is later enlarged, the new area is not recorded. Video ends when
+the window is closed, unmapped (i.e., iconified) or shrunk beyond the video
+size (which defaults to the initial window size).
+.Sp
+This option disables options \fBfollow_mouse\fR and \fBselect_region\fR.
 .IP "\fBvideo_size\fR" 4
 .IX Item "video_size"
-Set the video frame size. Default is the full desktop.
+Set the video frame size. Default is the full desktop or window.
 .IP "\fBgrab_x\fR" 4
 .IX Item "grab_x"
 .PD 0
@@ -1703,6 +1766,47 @@ Play a file on soundcard 1, audio device 7:
 .Sp
 .Vb 1
 \&        ffmpeg \-i INPUT \-f alsa hw:1,7
+.Ve
+.SS "AudioToolbox"
+.IX Subsection "AudioToolbox"
+AudioToolbox output device.
+.PP
+Allows native output to CoreAudio devices on \s-1OSX.\s0
+.PP
+The output filename can be empty (or \f(CW\*(C`\-\*(C'\fR) to refer to the default system output device or a number that refers to the device index as shown using: \f(CW\*(C`\-list_devices true\*(C'\fR.
+.PP
+Alternatively, the audio input device can be chosen by index using the
+.PP
+.Vb 1
+\&    B<\-audio_device_index E<lt>INDEXE<gt>>
+.Ve
+.PP
+, overriding any device name or index given in the input filename.
+.PP
+All available devices can be enumerated by using \fB\-list_devices true\fR, listing
+all device names, UIDs and corresponding indices.
+.PP
+\fIOptions\fR
+.IX Subsection "Options"
+.PP
+AudioToolbox supports the following options:
+.IP "\fB\-audio_device_index <\s-1INDEX\s0>\fR" 4
+.IX Item "-audio_device_index <INDEX>"
+Specify the audio device by its index. Overrides anything given in the output filename.
+.PP
+\fIExamples\fR
+.IX Subsection "Examples"
+.IP "\(bu" 4
+Print the list of supported devices and output a sine wave to the default device:
+.Sp
+.Vb 1
+\&        $ ffmpeg \-f lavfi \-i sine=r=44100 \-f audiotoolbox \-list_devices true \-
+.Ve
+.IP "\(bu" 4
+Output a sine wave to the device with the index 2, overriding any output filename:
+.Sp
+.Vb 1
+\&        $ ffmpeg \-f lavfi \-i sine=r=44100 \-f audiotoolbox \-audio_device_index 2 \-
 .Ve
 .SS "caca"
 .IX Subsection "caca"
@@ -1813,11 +1917,41 @@ Amount of time to preroll video in seconds.
 Defaults to \fB0.5\fR.
 .IP "\fBduplex_mode\fR" 4
 .IX Item "duplex_mode"
-Sets the decklink device duplex mode. Must be \fBunset\fR, \fBhalf\fR or \fBfull\fR.
+Sets the decklink device duplex/profile mode. Must be \fBunset\fR, \fBhalf\fR, \fBfull\fR,
+\&\fBone_sub_device_full\fR, \fBone_sub_device_half\fR, \fBtwo_sub_device_full\fR,
+\&\fBfour_sub_device_half\fR
 Defaults to \fBunset\fR.
+.Sp
+Note: DeckLink \s-1SDK 11.0\s0 have replaced the duplex property by a profile property.
+For the DeckLink Duo 2 and DeckLink Quad 2, a profile is shared between any 2
+sub-devices that utilize the same connectors. For the DeckLink 8K Pro, a profile
+is shared between all 4 sub-devices. So DeckLink 8K Pro support four profiles.
+.Sp
+Valid profile modes for DeckLink 8K Pro(with DeckLink \s-1SDK\s0 >= 11.0):
+\&\fBone_sub_device_full\fR, \fBone_sub_device_half\fR, \fBtwo_sub_device_full\fR,
+\&\fBfour_sub_device_half\fR
+.Sp
+Valid profile modes for DeckLink Quad 2 and DeckLink Duo 2:
+\&\fBhalf\fR, \fBfull\fR
 .IP "\fBtiming_offset\fR" 4
 .IX Item "timing_offset"
 Sets the genlock timing pixel offset on the used output.
+Defaults to \fBunset\fR.
+.IP "\fBlink\fR" 4
+.IX Item "link"
+Sets the \s-1SDI\s0 video link configuration on the used output. Must be
+\&\fBunset\fR, \fBsingle\fR link \s-1SDI,\s0 \fBdual\fR link \s-1SDI\s0 or \fBquad\fR link
+\&\s-1SDI.\s0
+Defaults to \fBunset\fR.
+.IP "\fBsqd\fR" 4
+.IX Item "sqd"
+Enable Square Division Quad Split mode for Quad-link \s-1SDI\s0 output.
+Must be \fBunset\fR, \fBtrue\fR or \fBfalse\fR.
+Defaults to \fBunset\fR.
+.IP "\fBlevel_a\fR" 4
+.IX Item "level_a"
+Enable \s-1SMPTE\s0 Level A mode on the used output.
+Must be \fBunset\fR, \fBtrue\fR or \fBfalse\fR.
 Defaults to \fBunset\fR.
 .PP
 \fIExamples\fR
@@ -2143,9 +2277,9 @@ Decode and display the input video to multiple X11 windows:
 The FFmpeg developers.
 .PP
 For details about the authorship, see the Git history of the project
-(git://source.ffmpeg.org/ffmpeg), e.g. by typing the command
+(https://git.ffmpeg.org/ffmpeg), e.g. by typing the command
 \&\fBgit log\fR in the FFmpeg source directory, or browsing the
-online repository at <\fBhttp://source.ffmpeg.org\fR>.
+online repository at <\fBhttps://git.ffmpeg.org/ffmpeg\fR>.
 .PP
 Maintainers for the specific components are listed in the file
 \&\fI\s-1MAINTAINERS\s0\fR in the source code tree.

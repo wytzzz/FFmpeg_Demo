@@ -5,10 +5,10 @@ includedir=/Users/admin/home_space/media/FFmpeg/build/include
 
 Name: libavutil
 Description: FFmpeg utility library
-Version: 56.51.100
+Version: 57.17.100
 Requires: 
 Requires.private: 
 Conflicts:
 Libs: -L${libdir}  -lavutil 
-Libs.private: -pthread -lm -framework VideoToolbox -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework CoreServices
+Libs.private: -pthread -lm -framework VideoToolbox -L/usr/local/Cellar/libx11/1.7.2/lib -lX11 -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework CoreServices
 Cflags: -I${includedir}

@@ -243,11 +243,13 @@ maximum of 2 digits. The \fIm\fR at the end expresses decimal value for
 \&\fIor\fR
 .PP
 .Vb 1
-\&        [\-]<S>+[.<m>...]
+\&        [\-]<S>+[.<m>...][s|ms|us]
 .Ve
 .PP
 \&\fIS\fR expresses the number of seconds, with the optional decimal part
-\&\fIm\fR.
+\&\fIm\fR.  The optional literal suffixes \fBs\fR, \fBms\fR or \fBus\fR
+indicate to interpret the value as seconds, milliseconds or microseconds,
+respectively.
 .PP
 In both expressions, the optional \fB\-\fR indicates negative duration.
 .PP
@@ -1085,6 +1087,9 @@ following identifiers:
 .IP "\fBdownmix\fR" 4
 .IX Item "downmix"
 \&\s-1DL+DR\s0
+.IP "\fB22.2\fR" 4
+.IX Item "22.2"
+\&\s-1FL+FR+FC+LFE+BL+BR+FLC+FRC+BC+SL+SR+TC+TFL+TFC+TFR+TBL+TBC+TBR+LFE2+TSL+TSR+BFC+BFL+BFR\s0
 .PP
 A custom channel layout can be specified as a sequence of terms, separated by
 \&'+' or '|'. Each term can be:
@@ -1465,9 +1470,9 @@ indication of the corresponding powers of 10 and of 2.
 The FFmpeg developers.
 .PP
 For details about the authorship, see the Git history of the project
-(git://source.ffmpeg.org/ffmpeg), e.g. by typing the command
+(https://git.ffmpeg.org/ffmpeg), e.g. by typing the command
 \&\fBgit log\fR in the FFmpeg source directory, or browsing the
-online repository at <\fBhttp://source.ffmpeg.org\fR>.
+online repository at <\fBhttps://git.ffmpeg.org/ffmpeg\fR>.
 .PP
 Maintainers for the specific components are listed in the file
 \&\fI\s-1MAINTAINERS\s0\fR in the source code tree.

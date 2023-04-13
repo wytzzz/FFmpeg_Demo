@@ -5,9 +5,9 @@ includedir=/Users/admin/home_space/media/FFmpeg/build/include
 
 Name: libswscale
 Description: FFmpeg image rescaling library
-Version: 5.7.100
+Version: 6.4.100
 Requires: 
-Requires.private: libavutil >= 56.51.100
+Requires.private: libavutil >= 57.17.100
 Conflicts:
 Libs: -L${libdir}  -lswscale 
 Libs.private: -lm

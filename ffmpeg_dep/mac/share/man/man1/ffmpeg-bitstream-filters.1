@@ -240,7 +240,7 @@ Top-left position.
 .RE
 .IP "\fBtick_rate\fR" 4
 .IX Item "tick_rate"
-Set the tick rate (\fInum_units_in_display_tick / time_scale\fR) in
+Set the tick rate (\fItime_scale / num_units_in_display_tick\fR) in
 the timing info in the sequence header.
 .IP "\fBnum_ticks_per_picture\fR" 4
 .IX Item "num_ticks_per_picture"
@@ -415,7 +415,7 @@ Set the chroma sample location in the stream (see H.264 section
 E.2.1 and figure E\-1).
 .IP "\fBtick_rate\fR" 4
 .IX Item "tick_rate"
-Set the tick rate (num_units_in_tick / time_scale) in the \s-1VUI\s0
+Set the tick rate (time_scale / num_units_in_tick) in the \s-1VUI\s0
 parameters.  This is the smallest time unit representable in the
 stream, and in many cases represents the field rate of the stream
 (double the frame rate).
@@ -425,6 +425,12 @@ Set whether the stream has fixed framerate \- typically this indicates
 that the framerate is exactly half the tick rate, but the exact
 meaning is dependent on interlacing and the picture structure (see
 H.264 section E.2.1 and table E\-6).
+.IP "\fBzero_new_constraint_set_flags\fR" 4
+.IX Item "zero_new_constraint_set_flags"
+Zero constraint_set4_flag and constraint_set5_flag in the \s-1SPS.\s0 These
+bits were reserved in a previous version of the H.264 spec, and thus
+some hardware decoders require these to be zero. The result of zeroing
+this is still a valid bitstream.
 .IP "\fBcrop_left\fR" 4
 .IX Item "crop_left"
 .PD 0
@@ -530,8 +536,8 @@ Set the chroma sample location in the stream (see H.265 section
 E.3.1 and figure E.1).
 .IP "\fBtick_rate\fR" 4
 .IX Item "tick_rate"
-Set the tick rate in the \s-1VPS\s0 and \s-1VUI\s0 parameters (num_units_in_tick /
-time_scale).  Combined with \fBnum_ticks_poc_diff_one\fR, this can
+Set the tick rate in the \s-1VPS\s0 and \s-1VUI\s0 parameters (time_scale /
+num_units_in_tick). Combined with \fBnum_ticks_poc_diff_one\fR, this can
 set a constant framerate in the stream.  Note that it is likely to be
 overridden by container parameters when the stream is in a container.
 .IP "\fBnum_ticks_poc_diff_one\fR" 4
@@ -714,21 +720,85 @@ container. Can be used for fuzzing or testing error resilience/concealment.
 Parameters:
 .IP "\fBamount\fR" 4
 .IX Item "amount"
-A numeral string, whose value is related to how often output bytes will
-be modified. Therefore, values below or equal to 0 are forbidden, and
-the lower the more frequent bytes will be modified, with 1 meaning
-every byte is modified.
+Accepts an expression whose evaluation per-packet determines how often bytes in that
+packet will be modified. A value below 0 will result in a variable frequency.
+Default is 0 which results in no modification. However, if neither amount nor drop is specified,
+amount will be set to \fI\-1\fR. See below for accepted variables.
+.IP "\fBdrop\fR" 4
+.IX Item "drop"
+Accepts an expression evaluated per-packet whose value determines whether that packet is dropped.
+Evaluation to a positive value results in the packet being dropped. Evaluation to a negative
+value results in a variable chance of it being dropped, roughly inverse in proportion to the magnitude
+of the value. Default is 0 which results in no drops. See below for accepted variables.
 .IP "\fBdropamount\fR" 4
 .IX Item "dropamount"
-A numeral string, whose value is related to how often packets will be dropped.
-Therefore, values below or equal to 0 are forbidden, and the lower the more
-frequent packets will be dropped, with 1 meaning every packet is dropped.
+Accepts a non-negative integer, which assigns a variable chance of it being dropped, roughly inverse
+in proportion to the value. Default is 0 which results in no drops. This option is kept for backwards
+compatibility and is equivalent to setting drop to a negative value with the same magnitude
+i.e. \f(CW\*(C`dropamount=4\*(C'\fR is the same as \f(CW\*(C`drop=\-4\*(C'\fR. Ignored if drop is also specified.
 .PP
-The following example applies the modification to every byte but does not drop
-any packets.
+Both \f(CW\*(C`amount\*(C'\fR and \f(CW\*(C`drop\*(C'\fR accept expressions containing the following variables:
+.IP "\fBn\fR" 4
+.IX Item "n"
+The index of the packet, starting from zero.
+.IP "\fBtb\fR" 4
+.IX Item "tb"
+The timebase for packet timestamps.
+.IP "\fBpts\fR" 4
+.IX Item "pts"
+Packet presentation timestamp.
+.IP "\fBdts\fR" 4
+.IX Item "dts"
+Packet decoding timestamp.
+.IP "\fBnopts\fR" 4
+.IX Item "nopts"
+Constant representing \s-1AV_NOPTS_VALUE.\s0
+.IP "\fBstartpts\fR" 4
+.IX Item "startpts"
+First non\-AV_NOPTS_VALUE \s-1PTS\s0 seen in the stream.
+.IP "\fBstartdts\fR" 4
+.IX Item "startdts"
+First non\-AV_NOPTS_VALUE \s-1DTS\s0 seen in the stream.
+.IP "\fBduration\fR" 4
+.IX Item "duration"
+.PD 0
+.IP "\fBd\fR" 4
+.IX Item "d"
+.PD
+Packet duration, in timebase units.
+.IP "\fBpos\fR" 4
+.IX Item "pos"
+Packet position in input; may be \-1 when unknown or not set.
+.IP "\fBsize\fR" 4
+.IX Item "size"
+Packet size, in bytes.
+.IP "\fBkey\fR" 4
+.IX Item "key"
+Whether packet is marked as a keyframe.
+.IP "\fBstate\fR" 4
+.IX Item "state"
+A pseudo random integer, primarily derived from the content of packet payload.
+.PP
+\fIExamples\fR
+.IX Subsection "Examples"
+.PP
+Apply modification to every byte but don't drop any packets.
 .PP
 .Vb 1
-\&        ffmpeg \-i INPUT \-c copy \-bsf noise[=1] output.mkv
+\&        ffmpeg \-i INPUT \-c copy \-bsf noise=1 output.mkv
+.Ve
+.PP
+Drop every video packet not marked as a keyframe after timestamp 30s but do not
+modify any of the remaining packets.
+.PP
+.Vb 1
+\&        ffmpeg \-i INPUT \-c copy \-bsf:v noise=drop=\*(Aqgt(t\e,30)*not(key)\*(Aq output.mkv
+.Ve
+.PP
+Drop one second of audio every 10 seconds and add some random noise to the rest.
+.PP
+.Vb 1
+\&        ffmpeg \-i INPUT \-c copy \-bsf:a noise=amount=\-1:drop=\*(Aqbetween(mod(t\e,10)\e,9\e,10)\*(Aq output.mkv
 .Ve
 .SS "null"
 .IX Subsection "null"
@@ -876,6 +946,67 @@ Remove extradata from all frames.
 .RE
 .RS 4
 .RE
+.SS "setts"
+.IX Subsection "setts"
+Set \s-1PTS\s0 and \s-1DTS\s0 in packets.
+.PP
+It accepts the following parameters:
+.IP "\fBts\fR" 4
+.IX Item "ts"
+.PD 0
+.IP "\fBpts\fR" 4
+.IX Item "pts"
+.IP "\fBdts\fR" 4
+.IX Item "dts"
+.PD
+Set expressions for \s-1PTS, DTS\s0 or both.
+.PP
+The expressions are evaluated through the eval \s-1API\s0 and can contain the following
+constants:
+.IP "\fBN\fR" 4
+.IX Item "N"
+The count of the input packet. Starting from 0.
+.IP "\fB\s-1TS\s0\fR" 4
+.IX Item "TS"
+The demux timestamp in input in case of \f(CW\*(C`ts\*(C'\fR or \f(CW\*(C`dts\*(C'\fR option or presentation
+timestamp in case of \f(CW\*(C`pts\*(C'\fR option.
+.IP "\fB\s-1POS\s0\fR" 4
+.IX Item "POS"
+The original position in the file of the packet, or undefined if undefined
+for the current packet
+.IP "\fB\s-1DTS\s0\fR" 4
+.IX Item "DTS"
+The demux timestamp in input.
+.IP "\fB\s-1PTS\s0\fR" 4
+.IX Item "PTS"
+The presentation timestamp in input.
+.IP "\fB\s-1STARTDTS\s0\fR" 4
+.IX Item "STARTDTS"
+The \s-1DTS\s0 of the first packet.
+.IP "\fB\s-1STARTPTS\s0\fR" 4
+.IX Item "STARTPTS"
+The \s-1PTS\s0 of the first packet.
+.IP "\fB\s-1PREV_INDTS\s0\fR" 4
+.IX Item "PREV_INDTS"
+The previous input \s-1DTS.\s0
+.IP "\fB\s-1PREV_INPTS\s0\fR" 4
+.IX Item "PREV_INPTS"
+The previous input \s-1PTS.\s0
+.IP "\fB\s-1PREV_OUTDTS\s0\fR" 4
+.IX Item "PREV_OUTDTS"
+The previous output \s-1DTS.\s0
+.IP "\fB\s-1PREV_OUTPTS\s0\fR" 4
+.IX Item "PREV_OUTPTS"
+The previous output \s-1PTS.\s0
+.IP "\fB\s-1TB\s0\fR" 4
+.IX Item "TB"
+The timebase of stream packet belongs.
+.IP "\fB\s-1SR\s0\fR" 4
+.IX Item "SR"
+The sample rate of stream packet belongs.
+.IP "\fB\s-1NOPTS\s0\fR" 4
+.IX Item "NOPTS"
+The \s-1AV_NOPTS_VALUE\s0 constant.
 .SS "text2movsub"
 .IX Subsection "text2movsub"
 Convert text subtitles to \s-1MOV\s0 subtitles (as used by the \f(CW\*(C`mov_text\*(C'\fR
@@ -955,9 +1086,9 @@ insert additional show-existing-frame packets to correct the ordering.
 The FFmpeg developers.
 .PP
 For details about the authorship, see the Git history of the project
-(git://source.ffmpeg.org/ffmpeg), e.g. by typing the command
+(https://git.ffmpeg.org/ffmpeg), e.g. by typing the command
 \&\fBgit log\fR in the FFmpeg source directory, or browsing the
-online repository at <\fBhttp://source.ffmpeg.org\fR>.
+online repository at <\fBhttps://git.ffmpeg.org/ffmpeg\fR>.
 .PP
 Maintainers for the specific components are listed in the file
 \&\fI\s-1MAINTAINERS\s0\fR in the source code tree.
