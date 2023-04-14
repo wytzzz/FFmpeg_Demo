@@ -118,9 +118,9 @@ typedef struct PacketQueue {
     AVFifoBuffer *pkt_list;
     int nb_packets;
     int size;
-    int64_t duration;
-    int abort_request;
-    int serial;
+    int64_t duration;  //队列长度,以time_base为单位.
+    int abort_request; //中断请求
+    int serial;     //
     SDL_mutex *mutex;
     SDL_cond *cond;
 } PacketQueue;
@@ -166,13 +166,14 @@ typedef struct Frame {
 } Frame;
 
 typedef struct FrameQueue {
-    Frame queue[FRAME_QUEUE_SIZE];
-    int rindex;
-    int windex;
-    int size;
+    Frame queue[FRAME_QUEUE_SIZE]; //帧队列。
+    int rindex; //帧队列的读指针。
+    int windex; //帧队列的写指针。
+    int size;  //帧队列的大小。
     int max_size;
-    int keep_last;
-    int rindex_shown;
+    int keep_last; //当 keep_last 为真时，FrameQueue 会在队列末尾保留最后一帧视频，以便在播放结束时显示最后一帧,
+                    // 当 keep_last 为假时，FrameQueue 在播放结束时不会显示最后一帧视频，而且将其从队列中删除
+    int rindex_shown; //表示rindex是否已经被读取
     SDL_mutex *mutex;
     SDL_cond *cond;
     PacketQueue *pktq;
@@ -200,27 +201,29 @@ typedef struct Decoder {
     SDL_Thread *decoder_tid;
 } Decoder;
 
+
+//VideoState 结构体表示视频状态，包含了视频解码和播放所需的大部分变量和参数。
 typedef struct VideoState {
     SDL_Thread *read_tid;
     const AVInputFormat *iformat;
     int abort_request;  //中断
     int force_refresh;
-    int paused;
-    int last_paused;  //暂停
+    int paused; //视频是否处于暂停状态
+    int last_paused;
     int queue_attachments_req;
     int seek_req;  //seek操作
     int seek_flags;
     int64_t seek_pos;
     int64_t seek_rel;
     int read_pause_return;
-    AVFormatContext *ic;
+    AVFormatContext *ic;//输入文件的 AVFormatContext 结构体，包含了输入文件的格式和参数信息
     int realtime;
 
     Clock audclk;
-    Clock vidclk;
+    Clock vidclk; //视频时钟，用于同步音视频
     Clock extclk;
 
-    FrameQueue pictq;
+    FrameQueue pictq; //视频帧队列，用于存储已解码的视频帧
     FrameQueue subpq;
     FrameQueue sampq;
 
@@ -228,20 +231,20 @@ typedef struct VideoState {
     Decoder viddec;
     Decoder subdec;
 
-    int audio_stream;
+    int audio_stream; //流索引号
 
     int av_sync_type;
 
     double audio_clock;
     int audio_clock_serial;
-    double audio_diff_cum; /* used for AV difference average computation */
-    double audio_diff_avg_coef;
-    double audio_diff_threshold;
-    int audio_diff_avg_count;
+    double audio_diff_cum;  //video和audio的差异 /* used for AV difference average computation */
+    double audio_diff_avg_coef;  //音频时钟和视频时钟差值的平均系数。
+    double audio_diff_threshold; //音频时钟和视频时钟差值的阈值。
+    int audio_diff_avg_count;    //音频时钟和视频时钟差值的平均值的计数器。
     AVStream *audio_st;
     PacketQueue audioq;
     int audio_hw_buf_size;
-    uint8_t *audio_buf;
+    uint8_t *audio_buf;  //音频buffer
     uint8_t *audio_buf1;
     unsigned int audio_buf_size; /* in bytes */
     unsigned int audio_buf1_size;
@@ -255,8 +258,8 @@ typedef struct VideoState {
 #endif
     struct AudioParams audio_tgt;
     struct SwrContext *swr_ctx;
-    int frame_drops_early;
-    int frame_drops_late;
+    int frame_drops_early;  //视频帧早期丢弃的数量。
+    int frame_drops_late;   //视频帧延迟丢弃的数量
 
     enum ShowMode {
         SHOW_MODE_NONE = -1, SHOW_MODE_VIDEO = 0, SHOW_MODE_WAVES, SHOW_MODE_RDFT, SHOW_MODE_NB
@@ -269,7 +272,7 @@ typedef struct VideoState {
     FFTSample *rdft_data;
     int xpos;
     double last_vis_time;
-    SDL_Texture *vis_texture;
+    SDL_Texture *vis_texture; //视频帧的 SDL 纹理
     SDL_Texture *sub_texture;
     SDL_Texture *vid_texture;
 
@@ -277,20 +280,20 @@ typedef struct VideoState {
     AVStream *subtitle_st;
     PacketQueue subtitleq;
 
-    double frame_timer;
+    double frame_timer;  //当前帧的显示时间
     double frame_last_returned_time;
     double frame_last_filter_delay;
     int video_stream;
-    AVStream *video_st;
-    PacketQueue videoq;
-    double max_frame_duration;      // maximum duration of a frame - above this, we consider the jump a timestamp discontinuity
+    AVStream *video_st;  //视频流的 AVStream 结构体。
+    PacketQueue videoq;  //视频数据包队列，用于存储待解码的视频数据包。
+    double max_frame_duration;    //最大帧间隔时间，用于检测视频帧的丢弃情况。  // maximum duration of a frame - above this, we consider the jump a timestamp discontinuity
     struct SwsContext *img_convert_ctx;
     struct SwsContext *sub_convert_ctx;
     int eof;
 
     char *filename;
     int width, height, xleft, ytop;
-    int step;
+    int step; //是否为单帧调试模式。
 
 #if CONFIG_AVFILTER
     int vfilter_idx;
@@ -301,7 +304,7 @@ typedef struct VideoState {
     AVFilterGraph *agraph;              // audio filter graph
 #endif
 
-    int last_video_stream, last_audio_stream, last_subtitle_stream;
+    int last_video_stream, last_audio_stream, last_subtitle_stream;  //上一次播放的视频流索引号
 
     SDL_cond *continue_read_thread;
 } VideoState;
@@ -328,8 +331,8 @@ static int alwaysontop;
 static int startup_volume = 100;
 static int show_status = -1;
 static int av_sync_type = AV_SYNC_AUDIO_MASTER;
-static int64_t start_time = AV_NOPTS_VALUE;
-static int64_t duration = AV_NOPTS_VALUE;
+static int64_t start_time = AV_NOPTS_VALUE; //起始时间
+static int64_t duration = AV_NOPTS_VALUE; //持续时长
 static int fast = 0;
 static int genpts = 0;
 static int lowres = 0;
@@ -435,6 +438,7 @@ static int packet_queue_put_private(PacketQueue *q, AVPacket *pkt)
     }
 
     pkt1.pkt = pkt;
+    //设置packet的seq
     pkt1.serial = q->serial;
 
     av_fifo_generic_write(q->pkt_list, &pkt1, sizeof(pkt1), NULL);
@@ -534,7 +538,7 @@ static void packet_queue_start(PacketQueue *q)
 {
     SDL_LockMutex(q->mutex);
     q->abort_request = 0;
-    q->serial++;
+    q->serial++; //seq初始化为1
     SDL_UnlockMutex(q->mutex);
 }
 
@@ -551,8 +555,9 @@ static int packet_queue_get(PacketQueue *q, AVPacket *pkt, int block, int *seria
             ret = -1;
             break;
         }
-
+        //存在数据
         if (av_fifo_size(q->pkt_list) >= sizeof(pkt1)) {
+            //读取一帧数据
             av_fifo_generic_read(q->pkt_list, &pkt1, sizeof(pkt1), NULL);
             q->nb_packets--;
             q->size -= pkt1.pkt->size + sizeof(pkt1);
@@ -591,15 +596,20 @@ static int decoder_decode_frame(Decoder *d, AVFrame *frame, AVSubtitle *sub) {
     int ret = AVERROR(EAGAIN);
 
     for (;;) {
+      //1. 流连续的情况下，不断调用avcodec_receive_frame获取解码后的frame
         if (d->queue->serial == d->pkt_serial) {
             do {
+
                 if (d->queue->abort_request)
                     return -1;
 
+                //解码
                 switch (d->avctx->codec_type) {
                     case AVMEDIA_TYPE_VIDEO:
+                        //从解码器获取一帧数据
                         ret = avcodec_receive_frame(d->avctx, frame);
                         if (ret >= 0) {
+                            //设置帧的pts
                             if (decoder_reorder_pts == -1) {
                                 frame->pts = frame->best_effort_timestamp;
                             } else if (!decoder_reorder_pts) {
@@ -632,15 +642,18 @@ static int decoder_decode_frame(Decoder *d, AVFrame *frame, AVSubtitle *sub) {
             } while (ret != AVERROR(EAGAIN));
         }
 
+
         do {
             if (d->queue->nb_packets == 0)
                 SDL_CondSignal(d->empty_queue_cond);
             if (d->packet_pending) {
                 d->packet_pending = 0;
             } else {
+                //获取一个paket,并将pck.serial -> Decoder.pkt_serial
                 int old_serial = d->pkt_serial;
                 if (packet_queue_get(d->queue, d->pkt, 1, &d->pkt_serial) < 0)
                     return -1;
+                //需要切换流.
                 if (old_serial != d->pkt_serial) {
                     avcodec_flush_buffers(d->avctx);
                     d->finished = 0;
@@ -648,6 +661,7 @@ static int decoder_decode_frame(Decoder *d, AVFrame *frame, AVSubtitle *sub) {
                     d->next_pts_tb = d->start_pts_tb;
                 }
             }
+            //
             if (d->queue->serial == d->pkt_serial)
                 break;
             av_packet_unref(d->pkt);
@@ -1775,9 +1789,11 @@ static int get_video_frame(VideoState *is, AVFrame *frame)
 {
     int got_picture;
 
+    //解码一帧视频
     if ((got_picture = decoder_decode_frame(&is->viddec, frame, NULL)) < 0)
         return -1;
 
+    //解码成功
     if (got_picture) {
         double dpts = NAN;
 
@@ -2129,6 +2145,7 @@ static int decoder_start(Decoder *d, int (*fn)(void *), const char *thread_name,
     return 0;
 }
 
+//视频解码线程
 static int video_thread(void *arg)
 {
     VideoState *is = arg;
@@ -2136,6 +2153,7 @@ static int video_thread(void *arg)
     double pts;
     double duration;
     int ret;
+    //计算tb和fps
     AVRational tb = is->video_st->time_base;
     AVRational frame_rate = av_guess_frame_rate(is->ic, is->video_st, NULL);
 
@@ -2152,6 +2170,7 @@ static int video_thread(void *arg)
     if (!frame)
         return AVERROR(ENOMEM);
 
+    //进入解码循环
     for (;;) {
         ret = get_video_frame(is, frame);
         if (ret < 0)
@@ -2205,6 +2224,7 @@ static int video_thread(void *arg)
             ret = av_buffersink_get_frame_flags(filt_out, frame, 0);
             if (ret < 0) {
                 if (ret == AVERROR_EOF)
+                    //解码完成
                     is->viddec.finished = is->viddec.pkt_serial;
                 ret = 0;
                 break;
@@ -2215,8 +2235,11 @@ static int video_thread(void *arg)
                 is->frame_last_filter_delay = 0;
             tb = av_buffersink_get_time_base(filt_out);
 #endif
+            //16ms
             duration = (frame_rate.num && frame_rate.den ? av_q2d((AVRational){frame_rate.den, frame_rate.num}) : 0);
+            //pts x.xs
             pts = (frame->pts == AV_NOPTS_VALUE) ? NAN : frame->pts * av_q2d(tb);
+            //放入framequeue
             ret = queue_picture(is, frame, pts, duration, frame->pkt_pos, is->viddec.pkt_serial);
             av_frame_unref(frame);
 #if CONFIG_AVFILTER
@@ -2730,6 +2753,7 @@ static int decode_interrupt_cb(void *ctx)
     return is->abort_request;
 }
 
+///判断流接收到的数据包是否足够
 static int stream_has_enough_packets(AVStream *st, int stream_id, PacketQueue *queue) {
     return stream_id < 0 ||
            queue->abort_request ||
@@ -2737,6 +2761,7 @@ static int stream_has_enough_packets(AVStream *st, int stream_id, PacketQueue *q
            queue->nb_packets > MIN_FRAMES && (!queue->duration || av_q2d(st->time_base) * queue->duration > 1.0);
 }
 
+//判断是否为实时协议,非实时协议返回1
 static int is_realtime(AVFormatContext *s)
 {
     if(   !strcmp(s->iformat->name, "rtp")
@@ -2932,6 +2957,7 @@ static int read_thread(void *arg)
         goto fail;
     }
 
+    //未指定buffer长度,并且为实时协议
     if (infinite_buffer < 0 && is->realtime)
         infinite_buffer = 1;
 
@@ -2959,7 +2985,9 @@ static int read_thread(void *arg)
             continue;
         }
 #endif
+        //seek的处理
         if (is->seek_req) {
+
             int64_t seek_target = is->seek_pos;
             int64_t seek_min    = is->seek_rel > 0 ? seek_target - is->seek_rel + 2: INT64_MIN;
             int64_t seek_max    = is->seek_rel < 0 ? seek_target - is->seek_rel - 2: INT64_MAX;
@@ -2971,6 +2999,7 @@ static int read_thread(void *arg)
                 av_log(NULL, AV_LOG_ERROR,
                        "%s: error while seeking\n", is->ic->url);
             } else {
+                //清空packet queue
                 if (is->audio_stream >= 0)
                     packet_queue_flush(&is->audioq);
                 if (is->subtitle_stream >= 0)
@@ -2989,6 +3018,8 @@ static int read_thread(void *arg)
             if (is->paused)
                 step_to_next_frame(is);
         }
+
+        //附加照片送入流中
         if (is->queue_attachments_req) {
             if (is->video_st && is->video_st->disposition & AV_DISPOSITION_ATTACHED_PIC) {
                 if ((ret = av_packet_ref(pkt, &is->video_st->attached_pic)) < 0)
@@ -3000,7 +3031,7 @@ static int read_thread(void *arg)
         }
 
         /* if the queue are full, no need to read more */
-        //控制缓冲区
+        //缓存管理,放缓packet的读取速度
         if (infinite_buffer<1 &&
               (is->audioq.size + is->videoq.size + is->subtitleq.size > MAX_QUEUE_SIZE
             || (stream_has_enough_packets(is->audio_st, is->audio_stream, &is->audioq) &&
@@ -3013,10 +3044,12 @@ static int read_thread(void *arg)
             continue;
         }
 
-        //播放完成,循环播放
+        //控制循环播放
         if (!is->paused &&
+            //解码完成 &&
             (!is->audio_st || (is->auddec.finished == is->audioq.serial && frame_queue_nb_remaining(&is->sampq) == 0)) &&
             (!is->video_st || (is->viddec.finished == is->videoq.serial && frame_queue_nb_remaining(&is->pictq) == 0))) {
+            //用于控制循环的次数，当 loop 等于 1 时只执行一次循环，当 loop 为 0 时不执行任何循环，当 loop 大于 1 时执行多次循环。
             if (loop != 1 && (!loop || --loop)) {
                 stream_seek(is, start_time != AV_NOPTS_VALUE ? start_time : 0, 0, 0);
             } else if (autoexit) {
@@ -3024,10 +3057,11 @@ static int read_thread(void *arg)
                 goto fail;
             }
         }
-
-        //读取packet
+        //开始读取一帧视频
         ret = av_read_frame(ic, pkt);
+        //如果读取异常
         if (ret < 0) {
+            //如果读取结束,向解码器发送null,进程完成flush.
             if ((ret == AVERROR_EOF || avio_feof(ic->pb)) && !is->eof) {
                 if (is->video_stream >= 0)
                     packet_queue_put_nullpacket(&is->videoq, pkt, is->video_stream);
@@ -3037,12 +3071,15 @@ static int read_thread(void *arg)
                     packet_queue_put_nullpacket(&is->subtitleq, pkt, is->subtitle_stream);
                 is->eof = 1;
             }
+            //
             if (ic->pb && ic->pb->error) {
                 if (autoexit)
                     goto fail;
                 else
                     break;
             }
+
+            //如果都不是，可能只是要等一等
             SDL_LockMutex(wait_mutex);
             SDL_CondWaitTimeout(is->continue_read_thread, wait_mutex, 10);
             SDL_UnlockMutex(wait_mutex);
@@ -3053,11 +3090,14 @@ static int read_thread(void *arg)
         /* check if packet is in play range specified by user, then queue, otherwise discard */
         stream_start_time = ic->streams[pkt->stream_index]->start_time;
         pkt_ts = pkt->pts == AV_NOPTS_VALUE ? pkt->dts : pkt->pts;
+
         pkt_in_play_range = duration == AV_NOPTS_VALUE ||
+                //将pts转换为s
                 (pkt_ts - (stream_start_time != AV_NOPTS_VALUE ? stream_start_time : 0)) *
                 av_q2d(ic->streams[pkt->stream_index]->time_base) -
                 (double)(start_time != AV_NOPTS_VALUE ? start_time : 0) / 1000000
                 <= ((double)duration / 1000000);
+        //将pkt放入队列中
         if (pkt->stream_index == is->audio_stream && pkt_in_play_range) {
             packet_queue_put(&is->audioq, pkt);
         } else if (pkt->stream_index == is->video_stream && pkt_in_play_range
@@ -3693,6 +3733,29 @@ void show_help_default(const char *opt, const char *arg)
            );
 }
 
+/*
+ * 支持的参数
+-window_title：指定窗口标题。
+-nostats：禁止输出统计信息。
+-hide_banner：禁止输出 FFmpeg 的版权和版本信息。
+-i：指定输入文件。
+-sync_type：选择时钟同步方式，可选值为 audio、video 或 external。
+-video_size：指定视频窗口大小。
+-vcodec：指定视频解码器名称。
+-acodec：指定音频解码器名称。
+-threads：指定使用的线程数。
+-nodisp：禁止显示视频。
+-volume：设置音量大小，范围为 0-100。
+-ss：指定从输入文件的哪个时间点开始播放。
+-t：指定播放文件的时长。
+-seek_interval：指定快进或快退的时间间隔。
+-rw_timeout：指定读取输入文件的超时时间。
+-sync_video：强制同步视频时钟。
+-async：允许音频帧的异步解码和播放。
+-genpts：生成 PTS（显示时间戳）。
+-framedrop：允许帧丢失。
+-infbuf：允许无限制缓存数据包。
+ * */
 /* Called from the main */
 int main(int argc, char **argv)
 {
