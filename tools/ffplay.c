@@ -160,7 +160,7 @@ typedef struct Frame {
     int width;
     int height;
     int format;
-    AVRational sar;
+    AVRational sar;  //宽高比
     int uploaded;
     int flip_v;
 } Frame;
@@ -220,7 +220,7 @@ typedef struct VideoState {
     int realtime;
 
     Clock audclk;
-    Clock vidclk; //视频时钟，用于同步音视频
+    Clock vidclk; //显示视频帧的系统时间,实际时间
     Clock extclk;
 
     FrameQueue pictq; //视频帧队列，用于存储已解码的视频帧
@@ -272,9 +272,9 @@ typedef struct VideoState {
     FFTSample *rdft_data;
     int xpos;
     double last_vis_time;
-    SDL_Texture *vis_texture; //视频帧的 SDL 纹理
+    SDL_Texture *vis_texture;
     SDL_Texture *sub_texture;
-    SDL_Texture *vid_texture;
+    SDL_Texture *vid_texture; //视频帧的 SDL 纹理
 
     int subtitle_stream;
     AVStream *subtitle_st;
@@ -893,15 +893,23 @@ static void calculate_display_rect(SDL_Rect *rect,
     if (av_cmp_q(aspect_ratio, av_make_q(0, 1)) <= 0)
         aspect_ratio = av_make_q(1, 1);
 
+    //这个显示比例会在视频播放时使用，用于计算正确的显示尺寸。
     aspect_ratio = av_mul_q(aspect_ratio, av_make_q(pic_width, pic_height));
 
     /* XXX: we suppose the screen has a 1.0 pixel ratio */
+    //这段代码的作用是根据视频帧的宽高比和屏幕大小计算出正确的视频显示尺寸，以便在屏幕上正常显示视频画面。
     height = scr_height;
     width = av_rescale(height, aspect_ratio.num, aspect_ratio.den) & ~1;
+    /*接下来，代码中使用if语句判断视频画面的宽度是否超过了屏幕的宽度。如果宽度超过了屏幕宽度，则需要根据屏幕宽度重新计算视频画面的宽度和高度*/
+    //这一步填充了黑边
     if (width > scr_width) {
         width = scr_width;
+        //代码中将width设置为屏幕宽度，然后使用av_rescale函数将width乘以视频帧的高宽比的倒数（即高度与宽度的比值的倒数），得到视频画面的高度height。
         height = av_rescale(width, aspect_ratio.den, aspect_ratio.num) & ~1;
     }
+
+    //代码中得到的width和height变量就是视频画面的正确显示尺寸，可以用于在屏幕上正常显示视频画面
+    //填充了黑边,计算rect.
     x = (scr_width - width) / 2;
     y = (scr_height - height) / 2;
     rect->x = scr_xleft + x;
@@ -933,8 +941,10 @@ static int upload_texture(SDL_Texture **tex, AVFrame *frame, struct SwsContext *
     Uint32 sdl_pix_fmt;
     SDL_BlendMode sdl_blendmode;
     get_sdl_pix_fmt_and_blendmode(frame->format, &sdl_pix_fmt, &sdl_blendmode);
+    //创建texture
     if (realloc_texture(tex, sdl_pix_fmt == SDL_PIXELFORMAT_UNKNOWN ? SDL_PIXELFORMAT_ARGB8888 : sdl_pix_fmt, frame->width, frame->height, sdl_blendmode, 0) < 0)
         return -1;
+    //不同的像素格式处理
     switch (sdl_pix_fmt) {
         case SDL_PIXELFORMAT_UNKNOWN:
             /* This should only happen if we are not using avfilter... */
@@ -983,7 +993,9 @@ static void set_sdl_yuv_conversion_mode(AVFrame *frame)
 {
 #if SDL_VERSION_ATLEAST(2,0,8)
     SDL_YUV_CONVERSION_MODE mode = SDL_YUV_CONVERSION_AUTOMATIC;
+    //format
     if (frame && (frame->format == AV_PIX_FMT_YUV420P || frame->format == AV_PIX_FMT_YUYV422 || frame->format == AV_PIX_FMT_UYVY422)) {
+        //color_range
         if (frame->color_range == AVCOL_RANGE_JPEG)
             mode = SDL_YUV_CONVERSION_JPEG;
         else if (frame->colorspace == AVCOL_SPC_BT709)
@@ -1000,7 +1012,7 @@ static void video_image_display(VideoState *is)
     Frame *vp;
     Frame *sp = NULL;
     SDL_Rect rect;
-
+    //video_display中显示的是frame_queue_peek_last
     vp = frame_queue_peek_last(&is->pictq);
     if (is->subtitle_st) {
         if (frame_queue_nb_remaining(&is->subpq) > 0) {
@@ -1047,16 +1059,22 @@ static void video_image_display(VideoState *is)
         }
     }
 
+    //将帧宽高按照sar最大适配到窗口
     calculate_display_rect(&rect, is->xleft, is->ytop, is->width, is->height, vp->width, vp->height, vp->sar);
 
+
     if (!vp->uploaded) {
+        //将内存数据上传到texture
         if (upload_texture(&is->vid_texture, vp->frame, &is->img_convert_ctx) < 0)
             return;
         vp->uploaded = 1;
         vp->flip_v = vp->frame->linesize[0] < 0;
     }
 
+    //设置yuv->rgb的标准
     set_sdl_yuv_conversion_mode(vp->frame);
+
+    //执行渲染
     SDL_RenderCopyEx(renderer, is->vid_texture, NULL, &rect, 0, NULL, vp->flip_v ? SDL_FLIP_VERTICAL : 0);
     set_sdl_yuv_conversion_mode(NULL);
     if (sp) {
@@ -1367,7 +1385,7 @@ static int video_open(VideoState *is)
     if (!window_title)
         window_title = input_filename;
     SDL_SetWindowTitle(window, window_title);
-
+    //设置windows属性
     SDL_SetWindowSize(window, w, h);
     SDL_SetWindowPosition(window, screen_left, screen_top);
     if (is_full_screen)
@@ -1386,11 +1404,14 @@ static void video_display(VideoState *is)
     if (!is->width)
         video_open(is);
 
+    //清空背景
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
+    //图形化显示仅有音轨的文件
     if (is->audio_st && is->show_mode != SHOW_MODE_VIDEO)
         video_audio_display(is);
     else if (is->video_st)
+    //显示一帧视频画面
         video_image_display(is);
     SDL_RenderPresent(renderer);
 }
@@ -1604,18 +1625,20 @@ static void video_refresh(void *opaque, double *remaining_time)
 
     if (!is->paused && get_master_sync_type(is) == AV_SYNC_EXTERNAL_CLOCK && is->realtime)
         check_external_clock_speed(is);
-
+    //只显示音频.则显示波形图
     if (!display_disable && is->show_mode != SHOW_MODE_VIDEO && is->audio_st) {
         time = av_gettime_relative() / 1000000.0;
         if (is->force_refresh || is->last_vis_time + rdftspeed < time) {
             video_display(is);
             is->last_vis_time = time;
         }
+        //
         *remaining_time = FFMIN(*remaining_time, is->last_vis_time + rdftspeed - time);
     }
 
     if (is->video_st) {
 retry:
+
         if (frame_queue_nb_remaining(&is->pictq) == 0) {
             // nothing to do, no picture to display in the queue
         } else {
@@ -1626,9 +1649,10 @@ retry:
             lastvp = frame_queue_peek_last(&is->pictq);
             vp = frame_queue_peek(&is->pictq);
 
+            //seek后,跳过
             if (vp->serial != is->videoq.serial) {
                 frame_queue_next(&is->pictq);
-                goto retry;
+                goto retry; //计算上一帧应显示的时长，判断是否继续显示上一帧
             }
 
             if (lastvp->serial != vp->serial)
@@ -1638,34 +1662,42 @@ retry:
                 goto display;
 
             /* compute nominal last_duration */
+            //计算准确的lastvp应显示时长
             last_duration = vp_duration(is, lastvp, vp);
             delay = compute_target_delay(last_duration, is);
 
             time= av_gettime_relative()/1000000.0;
+            //如果当前系统时刻还未到达上一帧的结束时刻，那么还应该继续显示上一帧。
             if (time < is->frame_timer + delay) {
                 *remaining_time = FFMIN(is->frame_timer + delay - time, *remaining_time);
                 goto display;
             }
 
+            //确定要刷帧
+            //记录当前帧的pts
             is->frame_timer += delay;
+            //如果和系统时间差距太大，就纠正为系统时间
             if (delay > 0 && time - is->frame_timer > AV_SYNC_THRESHOLD_MAX)
                 is->frame_timer = time;
 
             SDL_LockMutex(is->pictq.mutex);
             if (!isnan(vp->pts))
+                //更新vidclk
                 update_video_pts(is, vp->pts, vp->pos, vp->serial);
             SDL_UnlockMutex(is->pictq.mutex);
-
+            //只有有nextvp才会丢帧
             if (frame_queue_nb_remaining(&is->pictq) > 1) {
+                //计算当前帧的持续时间
                 Frame *nextvp = frame_queue_peek_next(&is->pictq);
                 duration = vp_duration(is, vp, nextvp);
+                //如果超时,则丢弃
                 if(!is->step && (framedrop>0 || (framedrop && get_master_sync_type(is) != AV_SYNC_VIDEO_MASTER)) && time > is->frame_timer + duration){
-                    is->frame_drops_late++;
+                    is->frame_drops_late++; //记录因为帧太晚丢帧.
                     frame_queue_next(&is->pictq);
                     goto retry;
                 }
             }
-
+            //字幕流的处理
             if (is->subtitle_st) {
                 while (frame_queue_nb_remaining(&is->subpq) > 0) {
                     sp = frame_queue_peek(&is->subpq);
@@ -1700,6 +1732,7 @@ retry:
                 }
             }
 
+            //滑动rindex
             frame_queue_next(&is->pictq);
             is->force_refresh = 1;
 
@@ -1708,6 +1741,7 @@ retry:
         }
 display:
         /* display picture */
+        //显示一帧
         if (!display_disable && is->force_refresh && is->show_mode == SHOW_MODE_VIDEO && is->pictq.rindex_shown)
             video_display(is);
     }
@@ -3309,14 +3343,18 @@ static void toggle_audio_display(VideoState *is)
 static void refresh_loop_wait_event(VideoState *is, SDL_Event *event) {
     double remaining_time = 0.0;
     SDL_PumpEvents();
+    //非阻塞查询队列中是否有事件,没有事件则继续执行
     while (!SDL_PeepEvents(event, 1, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT)) {
+        //鼠标自动隐藏逻辑
         if (!cursor_hidden && av_gettime_relative() - cursor_last_shown > CURSOR_HIDE_DELAY) {
             SDL_ShowCursor(0);
             cursor_hidden = 1;
         }
+        //如果当前帧生命周期还没过,则继续显示.
         if (remaining_time > 0.0)
             av_usleep((int64_t)(remaining_time * 1000000.0));
         remaining_time = REFRESH_RATE;
+        //刷新画面
         if (is->show_mode != SHOW_MODE_NONE && (!is->paused || is->force_refresh))
             video_refresh(is, &remaining_time);
         SDL_PumpEvents();
@@ -3358,6 +3396,7 @@ static void event_loop(VideoState *cur_stream)
 
     for (;;) {
         double x;
+        //video是在这里显示的
         refresh_loop_wait_event(cur_stream, &event);
         switch (event.type) {
         case SDL_KEYDOWN:
@@ -3368,6 +3407,7 @@ static void event_loop(VideoState *cur_stream)
             // If we don't yet have a window, skip all key events, because read_thread might still be initializing...
             if (!cur_stream->width)
                 continue;
+            //处理用户按键操作
             switch (event.key.keysym.sym) {
             case SDLK_f:
                 toggle_full_screen(cur_stream);
@@ -3824,6 +3864,7 @@ int main(int argc, char **argv)
     }
     if (display_disable)
         flags &= ~SDL_INIT_VIDEO;
+    //初始话sdl
     if (SDL_Init (flags)) {
         av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
         av_log(NULL, AV_LOG_FATAL, "(Did you set the DISPLAY variable?)\n");
@@ -3849,9 +3890,11 @@ int main(int argc, char **argv)
 #ifdef SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR
         SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
 #endif
+        //2. SDL_CreateWindow
         window = SDL_CreateWindow(program_name, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, default_width, default_height, flags);
         SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
         if (window) {
+            //3. SDL_CreateRender
             renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
             if (!renderer) {
                 av_log(NULL, AV_LOG_WARNING, "Failed to initialize a hardware accelerated renderer: %s\n", SDL_GetError());
@@ -3867,7 +3910,7 @@ int main(int argc, char **argv)
             do_exit(NULL);
         }
     }
-
+    //4. stream_open
     is = stream_open(input_filename, file_iformat);
     if (!is) {
         av_log(NULL, AV_LOG_FATAL, "Failed to initialize VideoState!\n");
