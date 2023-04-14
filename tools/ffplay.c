@@ -184,6 +184,7 @@ enum {
     AV_SYNC_EXTERNAL_CLOCK, /* synchronize to an external clock */
 };
 
+//解码器持有的资源
 typedef struct Decoder {
     AVPacket *pkt;
     PacketQueue *queue;
@@ -202,12 +203,12 @@ typedef struct Decoder {
 typedef struct VideoState {
     SDL_Thread *read_tid;
     const AVInputFormat *iformat;
-    int abort_request;
+    int abort_request;  //中断
     int force_refresh;
     int paused;
-    int last_paused;
+    int last_paused;  //暂停
     int queue_attachments_req;
-    int seek_req;
+    int seek_req;  //seek操作
     int seek_flags;
     int64_t seek_pos;
     int64_t seek_rel;
@@ -2587,7 +2588,7 @@ static int stream_component_open(VideoState *is, int stream_index)
     avctx = avcodec_alloc_context3(NULL);
     if (!avctx)
         return AVERROR(ENOMEM);
-
+    //初始化流解码器
     ret = avcodec_parameters_to_context(avctx, ic->streams[stream_index]->codecpar);
     if (ret < 0)
         goto fail;
@@ -2638,6 +2639,7 @@ static int stream_component_open(VideoState *is, int stream_index)
 
     is->eof = 0;
     ic->streams[stream_index]->discard = AVDISCARD_DEFAULT;
+    //分配列初始化流: fiter codec
     switch (avctx->codec_type) {
     case AVMEDIA_TYPE_AUDIO:
 #if CONFIG_AVFILTER
@@ -2695,6 +2697,7 @@ static int stream_component_open(VideoState *is, int stream_index)
 
         if ((ret = decoder_init(&is->viddec, avctx, &is->videoq, is->continue_read_thread)) < 0)
             goto fail;
+        //视频解码线程
         if ((ret = decoder_start(&is->viddec, video_thread, "video_decoder", is)) < 0)
             goto out;
         is->queue_attachments_req = 1;
@@ -2893,7 +2896,7 @@ static int read_thread(void *arg)
                                 st_index[AVMEDIA_TYPE_SUBTITLE],
                                 (st_index[AVMEDIA_TYPE_AUDIO] >= 0 ?
                                  st_index[AVMEDIA_TYPE_AUDIO] :
-                                 st_index[AVMEDIA_TYPE_VIDEO]),
+                                  st_index[AVMEDIA_TYPE_VIDEO]),
                                 NULL, 0);
 
     is->show_mode = show_mode;
@@ -2906,6 +2909,7 @@ static int read_thread(void *arg)
     }
 
     /* open the streams */
+    //打开流
     if (st_index[AVMEDIA_TYPE_AUDIO] >= 0) {
         stream_component_open(is, st_index[AVMEDIA_TYPE_AUDIO]);
     }
@@ -2931,9 +2935,13 @@ static int read_thread(void *arg)
     if (infinite_buffer < 0 && is->realtime)
         infinite_buffer = 1;
 
+    //进入主循环
     for (;;) {
+        //处理退出请求
         if (is->abort_request)
             break;
+
+        //处理暂停
         if (is->paused != is->last_paused) {
             is->last_paused = is->paused;
             if (is->paused)
@@ -2992,6 +3000,7 @@ static int read_thread(void *arg)
         }
 
         /* if the queue are full, no need to read more */
+        //控制缓冲区
         if (infinite_buffer<1 &&
               (is->audioq.size + is->videoq.size + is->subtitleq.size > MAX_QUEUE_SIZE
             || (stream_has_enough_packets(is->audio_st, is->audio_stream, &is->audioq) &&
@@ -3003,6 +3012,8 @@ static int read_thread(void *arg)
             SDL_UnlockMutex(wait_mutex);
             continue;
         }
+
+        //播放完成,循环播放
         if (!is->paused &&
             (!is->audio_st || (is->auddec.finished == is->audioq.serial && frame_queue_nb_remaining(&is->sampq) == 0)) &&
             (!is->video_st || (is->viddec.finished == is->videoq.serial && frame_queue_nb_remaining(&is->pictq) == 0))) {
@@ -3013,6 +3024,8 @@ static int read_thread(void *arg)
                 goto fail;
             }
         }
+
+        //读取packet
         ret = av_read_frame(ic, pkt);
         if (ret < 0) {
             if ((ret == AVERROR_EOF || avio_feof(ic->pb)) && !is->eof) {
@@ -3123,6 +3136,7 @@ static VideoState *stream_open(const char *filename,
     is->audio_volume = startup_volume;
     is->muted = 0;
     is->av_sync_type = av_sync_type;
+    //创建读取线程
     is->read_tid     = SDL_CreateThread(read_thread, "read_thread", is);
     if (!is->read_tid) {
         av_log(NULL, AV_LOG_FATAL, "SDL_CreateThread(): %s\n", SDL_GetError());
