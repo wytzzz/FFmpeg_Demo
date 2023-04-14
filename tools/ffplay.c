@@ -120,7 +120,7 @@ typedef struct PacketQueue {
     int size;
     int64_t duration;  //队列长度,以time_base为单位.
     int abort_request; //中断请求
-    int serial;     //
+int serial;            //流标识,当需要重新sync流的时候serial++.
     SDL_mutex *mutex;
     SDL_cond *cond;
 } PacketQueue;
@@ -258,7 +258,7 @@ typedef struct VideoState {
 #endif
     struct AudioParams audio_tgt;
     struct SwrContext *swr_ctx;
-    int frame_drops_early;  //视频帧早期丢弃的数量。
+    int frame_drops_early;  //视频帧早到丢弃的数量。
     int frame_drops_late;   //视频帧延迟丢弃的数量
 
     enum ShowMode {
@@ -511,7 +511,7 @@ static void packet_queue_flush(PacketQueue *q)
     q->nb_packets = 0;
     q->size = 0;
     q->duration = 0;
-    q->serial++;
+    q->serial++; //表示流切换.
     SDL_UnlockMutex(q->mutex);
 }
 
@@ -592,11 +592,12 @@ static int decoder_init(Decoder *d, AVCodecContext *avctx, PacketQueue *queue, S
     return 0;
 }
 
+//音频/视频/字幕 复用这个函数
 static int decoder_decode_frame(Decoder *d, AVFrame *frame, AVSubtitle *sub) {
     int ret = AVERROR(EAGAIN);
 
     for (;;) {
-      //1. 流连续的情况下，不断调用avcodec_receive_frame获取解码后的frame
+      //流未切换,读取视频帧
         if (d->queue->serial == d->pkt_serial) {
             do {
 
@@ -606,7 +607,7 @@ static int decoder_decode_frame(Decoder *d, AVFrame *frame, AVSubtitle *sub) {
                 //解码
                 switch (d->avctx->codec_type) {
                     case AVMEDIA_TYPE_VIDEO:
-                        //从解码器获取一帧数据
+                        //获取一帧视频数据
                         ret = avcodec_receive_frame(d->avctx, frame);
                         if (ret >= 0) {
                             //设置帧的pts
@@ -618,8 +619,10 @@ static int decoder_decode_frame(Decoder *d, AVFrame *frame, AVSubtitle *sub) {
                         }
                         break;
                     case AVMEDIA_TYPE_AUDIO:
+                        //获取一帧音频数据
                         ret = avcodec_receive_frame(d->avctx, frame);
                         if (ret >= 0) {
+                            //pts转换到采样率上.
                             AVRational tb = (AVRational){1, frame->sample_rate};
                             if (frame->pts != AV_NOPTS_VALUE)
                                 frame->pts = av_rescale_q(frame->pts, d->avctx->pkt_timebase, tb);
@@ -632,20 +635,24 @@ static int decoder_decode_frame(Decoder *d, AVFrame *frame, AVSubtitle *sub) {
                         }
                         break;
                 }
+
+                //如果读取结束,flush解码器
                 if (ret == AVERROR_EOF) {
                     d->finished = d->pkt_serial;
                     avcodec_flush_buffers(d->avctx);
                     return 0;
                 }
+                //如果从解码器读取到数据,则直接返回
+                //如果没有读取到数据,则往下执行,往解码器送入一帧数据.
                 if (ret >= 0)
                     return 1;
             } while (ret != AVERROR(EAGAIN));
         }
-
-
+        //发生流切换,处理seek,过滤seek前剩余的pack.
         do {
             if (d->queue->nb_packets == 0)
                 SDL_CondSignal(d->empty_queue_cond);
+            //之前pack发送失败,重新发送,避免从que中读取新数据覆盖pack.
             if (d->packet_pending) {
                 d->packet_pending = 0;
             } else {
@@ -653,8 +660,9 @@ static int decoder_decode_frame(Decoder *d, AVFrame *frame, AVSubtitle *sub) {
                 int old_serial = d->pkt_serial;
                 if (packet_queue_get(d->queue, d->pkt, 1, &d->pkt_serial) < 0)
                     return -1;
-                //需要切换流.
+                //发生了流切换
                 if (old_serial != d->pkt_serial) {
+                    //flush解码器
                     avcodec_flush_buffers(d->avctx);
                     d->finished = 0;
                     d->next_pts = d->start_pts;
@@ -667,6 +675,7 @@ static int decoder_decode_frame(Decoder *d, AVFrame *frame, AVSubtitle *sub) {
             av_packet_unref(d->pkt);
         } while (1);
 
+        //处理字幕流
         if (d->avctx->codec_type == AVMEDIA_TYPE_SUBTITLE) {
             int got_frame = 0;
             ret = avcodec_decode_subtitle2(d->avctx, sub, &got_frame, d->pkt);
@@ -680,9 +689,10 @@ static int decoder_decode_frame(Decoder *d, AVFrame *frame, AVSubtitle *sub) {
             }
             av_packet_unref(d->pkt);
         } else {
+            //向解码器发送一帧pack
             if (avcodec_send_packet(d->avctx, d->pkt) == AVERROR(EAGAIN)) {
                 av_log(d->avctx, AV_LOG_ERROR, "Receive_frame and send_packet both returned EAGAIN, which is an API violation.\n");
-                d->packet_pending = 1;
+                d->packet_pending = 1; //如果发送失败,则pending一下.
             } else {
                 av_packet_unref(d->pkt);
             }
@@ -1800,12 +1810,21 @@ static int get_video_frame(VideoState *is, AVFrame *frame)
         if (frame->pts != AV_NOPTS_VALUE)
             dpts = av_q2d(is->video_st->time_base) * frame->pts;
 
+        //计算宽高比
         frame->sample_aspect_ratio = av_guess_sample_aspect_ratio(is->ic, is->video_st, frame);
 
+        //如果允许丢帧或者音视频同步以音频为base.
+        //控制是否丢帧的开关变量是framedrop，为1，则始终判断是否丢帧；
+        // 为0，则始终不丢帧；
+        // 为-1（默认值），则在主时钟不是video的时候，判断是否丢帧。
         if (framedrop>0 || (framedrop && get_master_sync_type(is) != AV_SYNC_VIDEO_MASTER)) {
             if (frame->pts != AV_NOPTS_VALUE) {
+                //diff < 0,则表示视频慢了.
                 double diff = dpts - get_master_clock(is);
                 if (!isnan(diff) && fabs(diff) < AV_NOSYNC_THRESHOLD &&
+
+                    //滤波延迟会影响每一帧的pts
+                    //如果某一帧晚到了,就考虑丢弃.
                     diff - is->frame_last_filter_delay < 0 &&
                     is->viddec.pkt_serial == is->vidclk.serial &&
                     is->videoq.nb_packets) {
@@ -2172,6 +2191,7 @@ static int video_thread(void *arg)
 
     //进入解码循环
     for (;;) {
+        //解码一帧
         ret = get_video_frame(is, frame);
         if (ret < 0)
             goto the_end;
@@ -2229,17 +2249,17 @@ static int video_thread(void *arg)
                 ret = 0;
                 break;
             }
-
+            //计算滤波延迟.
             is->frame_last_filter_delay = av_gettime_relative() / 1000000.0 - is->frame_last_returned_time;
             if (fabs(is->frame_last_filter_delay) > AV_NOSYNC_THRESHOLD / 10.0)
                 is->frame_last_filter_delay = 0;
             tb = av_buffersink_get_time_base(filt_out);
 #endif
-            //16ms
+            //帧长和pts都转换为s为单位
             duration = (frame_rate.num && frame_rate.den ? av_q2d((AVRational){frame_rate.den, frame_rate.num}) : 0);
             //pts x.xs
             pts = (frame->pts == AV_NOPTS_VALUE) ? NAN : frame->pts * av_q2d(tb);
-            //放入framequeue
+            //放入播放队列
             ret = queue_picture(is, frame, pts, duration, frame->pkt_pos, is->viddec.pkt_serial);
             av_frame_unref(frame);
 #if CONFIG_AVFILTER
@@ -2266,10 +2286,12 @@ static int subtitle_thread(void *arg)
     int got_subtitle;
     double pts;
 
+    //注意这里是先frame_queue_peek_writable再decoder_decode_frame
     for (;;) {
+        //写入
         if (!(sp = frame_queue_peek_writable(&is->subpq)))
             return 0;
-
+        //解码
         if ((got_subtitle = decoder_decode_frame(&is->subdec, NULL, &sp->sub)) < 0)
             break;
 
@@ -2717,7 +2739,7 @@ static int stream_component_open(VideoState *is, int stream_index)
     case AVMEDIA_TYPE_VIDEO:
         is->video_stream = stream_index;
         is->video_st = ic->streams[stream_index];
-
+        //解码器初始化
         if ((ret = decoder_init(&is->viddec, avctx, &is->videoq, is->continue_read_thread)) < 0)
             goto fail;
         //视频解码线程
